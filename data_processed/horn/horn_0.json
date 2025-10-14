@@ -1,0 +1,237 @@
+{
+  "id": "horn_0",
+  "nodes": [
+    {
+      "nid": 0,
+      "type": "fact",
+      "label": "P3"
+    },
+    {
+      "nid": 1,
+      "type": "fact",
+      "label": "P0"
+    },
+    {
+      "nid": 2,
+      "type": "fact",
+      "label": "P8"
+    },
+    {
+      "nid": 3,
+      "type": "fact",
+      "label": "P7"
+    },
+    {
+      "nid": 4,
+      "type": "fact",
+      "label": "P7"
+    },
+    {
+      "nid": 5,
+      "type": "fact",
+      "label": "P4"
+    },
+    {
+      "nid": 6,
+      "type": "rule",
+      "label": "P13 -> P17",
+      "body_atoms": [
+        "P13"
+      ],
+      "head_atom": "P17"
+    },
+    {
+      "nid": 7,
+      "type": "fact",
+      "label": "P13"
+    },
+    {
+      "nid": 8,
+      "type": "fact",
+      "label": "P17"
+    },
+    {
+      "nid": 9,
+      "type": "rule",
+      "label": "P11 -> P1",
+      "body_atoms": [
+        "P11"
+      ],
+      "head_atom": "P1"
+    },
+    {
+      "nid": 10,
+      "type": "fact",
+      "label": "P11"
+    },
+    {
+      "nid": 11,
+      "type": "fact",
+      "label": "P1"
+    },
+    {
+      "nid": 12,
+      "type": "rule",
+      "label": "P1 -> P7",
+      "body_atoms": [
+        "P1"
+      ],
+      "head_atom": "P7"
+    },
+    {
+      "nid": 13,
+      "type": "rule",
+      "label": "P11 -> P17",
+      "body_atoms": [
+        "P11"
+      ],
+      "head_atom": "P17"
+    },
+    {
+      "nid": 14,
+      "type": "rule",
+      "label": "P4+P11 -> P0",
+      "body_atoms": [
+        "P4",
+        "P11"
+      ],
+      "head_atom": "P0"
+    },
+    {
+      "nid": 15,
+      "type": "rule",
+      "label": "P13 -> P10",
+      "body_atoms": [
+        "P13"
+      ],
+      "head_atom": "P10"
+    },
+    {
+      "nid": 16,
+      "type": "fact",
+      "label": "P10"
+    },
+    {
+      "nid": 17,
+      "type": "rule",
+      "label": "P3+P19 -> P10",
+      "body_atoms": [
+        "P3",
+        "P19"
+      ],
+      "head_atom": "P10"
+    },
+    {
+      "nid": 18,
+      "type": "fact",
+      "label": "P19"
+    },
+    {
+      "nid": 19,
+      "type": "rule",
+      "label": "P1 -> P3",
+      "body_atoms": [
+        "P1"
+      ],
+      "head_atom": "P3"
+    }
+  ],
+  "edges": [
+    {
+      "src": 7,
+      "dst": 6,
+      "etype": "body"
+    },
+    {
+      "src": 6,
+      "dst": 8,
+      "etype": "head"
+    },
+    {
+      "src": 10,
+      "dst": 9,
+      "etype": "body"
+    },
+    {
+      "src": 9,
+      "dst": 11,
+      "etype": "head"
+    },
+    {
+      "src": 11,
+      "dst": 12,
+      "etype": "body"
+    },
+    {
+      "src": 12,
+      "dst": 3,
+      "etype": "head"
+    },
+    {
+      "src": 10,
+      "dst": 13,
+      "etype": "body"
+    },
+    {
+      "src": 13,
+      "dst": 8,
+      "etype": "head"
+    },
+    {
+      "src": 5,
+      "dst": 14,
+      "etype": "body"
+    },
+    {
+      "src": 10,
+      "dst": 14,
+      "etype": "body"
+    },
+    {
+      "src": 14,
+      "dst": 1,
+      "etype": "head"
+    },
+    {
+      "src": 7,
+      "dst": 15,
+      "etype": "body"
+    },
+    {
+      "src": 15,
+      "dst": 16,
+      "etype": "head"
+    },
+    {
+      "src": 0,
+      "dst": 17,
+      "etype": "body"
+    },
+    {
+      "src": 18,
+      "dst": 17,
+      "etype": "body"
+    },
+    {
+      "src": 17,
+      "dst": 16,
+      "etype": "head"
+    },
+    {
+      "src": 11,
+      "dst": 19,
+      "etype": "body"
+    },
+    {
+      "src": 19,
+      "dst": 0,
+      "etype": "head"
+    }
+  ],
+  "proof_steps": [],
+  "metadata": {
+    "source": "synthetic_horn",
+    "n_facts": 6,
+    "n_rules": 8
+  }
+}

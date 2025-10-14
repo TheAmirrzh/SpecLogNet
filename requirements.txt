@@ -1,0 +1,8 @@
+numpy
+scipy
+networkx
+joblib
+torch
+torch-geometric
+pytest
+tqdm
