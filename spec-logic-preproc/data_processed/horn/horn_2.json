@@ -1,0 +1,272 @@
+{
+  "id": "horn_2",
+  "nodes": [
+    {
+      "nid": 0,
+      "type": "fact",
+      "label": "P16"
+    },
+    {
+      "nid": 1,
+      "type": "fact",
+      "label": "P19"
+    },
+    {
+      "nid": 2,
+      "type": "fact",
+      "label": "P13"
+    },
+    {
+      "nid": 3,
+      "type": "fact",
+      "label": "P7"
+    },
+    {
+      "nid": 4,
+      "type": "fact",
+      "label": "P4"
+    },
+    {
+      "nid": 5,
+      "type": "fact",
+      "label": "P4"
+    },
+    {
+      "nid": 6,
+      "type": "rule",
+      "label": "P9+P12 -> P19",
+      "body_atoms": [
+        "P9",
+        "P12"
+      ],
+      "head_atom": "P19"
+    },
+    {
+      "nid": 7,
+      "type": "fact",
+      "label": "P9"
+    },
+    {
+      "nid": 8,
+      "type": "fact",
+      "label": "P12"
+    },
+    {
+      "nid": 9,
+      "type": "rule",
+      "label": "P14 -> P13",
+      "body_atoms": [
+        "P14"
+      ],
+      "head_atom": "P13"
+    },
+    {
+      "nid": 10,
+      "type": "fact",
+      "label": "P14"
+    },
+    {
+      "nid": 11,
+      "type": "rule",
+      "label": "P4 -> P1",
+      "body_atoms": [
+        "P4"
+      ],
+      "head_atom": "P1"
+    },
+    {
+      "nid": 12,
+      "type": "fact",
+      "label": "P1"
+    },
+    {
+      "nid": 13,
+      "type": "rule",
+      "label": "P0+P11 -> P4",
+      "body_atoms": [
+        "P0",
+        "P11"
+      ],
+      "head_atom": "P4"
+    },
+    {
+      "nid": 14,
+      "type": "fact",
+      "label": "P0"
+    },
+    {
+      "nid": 15,
+      "type": "fact",
+      "label": "P11"
+    },
+    {
+      "nid": 16,
+      "type": "rule",
+      "label": "P6 -> P8",
+      "body_atoms": [
+        "P6"
+      ],
+      "head_atom": "P8"
+    },
+    {
+      "nid": 17,
+      "type": "fact",
+      "label": "P6"
+    },
+    {
+      "nid": 18,
+      "type": "fact",
+      "label": "P8"
+    },
+    {
+      "nid": 19,
+      "type": "rule",
+      "label": "P18 -> P16",
+      "body_atoms": [
+        "P18"
+      ],
+      "head_atom": "P16"
+    },
+    {
+      "nid": 20,
+      "type": "fact",
+      "label": "P18"
+    },
+    {
+      "nid": 21,
+      "type": "rule",
+      "label": "P12+P14 -> P2",
+      "body_atoms": [
+        "P12",
+        "P14"
+      ],
+      "head_atom": "P2"
+    },
+    {
+      "nid": 22,
+      "type": "fact",
+      "label": "P2"
+    },
+    {
+      "nid": 23,
+      "type": "rule",
+      "label": "P8 -> P2",
+      "body_atoms": [
+        "P8"
+      ],
+      "head_atom": "P2"
+    }
+  ],
+  "edges": [
+    {
+      "src": 7,
+      "dst": 6,
+      "etype": "body"
+    },
+    {
+      "src": 8,
+      "dst": 6,
+      "etype": "body"
+    },
+    {
+      "src": 6,
+      "dst": 1,
+      "etype": "head"
+    },
+    {
+      "src": 10,
+      "dst": 9,
+      "etype": "body"
+    },
+    {
+      "src": 9,
+      "dst": 2,
+      "etype": "head"
+    },
+    {
+      "src": 4,
+      "dst": 11,
+      "etype": "body"
+    },
+    {
+      "src": 11,
+      "dst": 12,
+      "etype": "head"
+    },
+    {
+      "src": 14,
+      "dst": 13,
+      "etype": "body"
+    },
+    {
+      "src": 15,
+      "dst": 13,
+      "etype": "body"
+    },
+    {
+      "src": 13,
+      "dst": 4,
+      "etype": "head"
+    },
+    {
+      "src": 17,
+      "dst": 16,
+      "etype": "body"
+    },
+    {
+      "src": 16,
+      "dst": 18,
+      "etype": "head"
+    },
+    {
+      "src": 20,
+      "dst": 19,
+      "etype": "body"
+    },
+    {
+      "src": 19,
+      "dst": 0,
+      "etype": "head"
+    },
+    {
+      "src": 8,
+      "dst": 21,
+      "etype": "body"
+    },
+    {
+      "src": 10,
+      "dst": 21,
+      "etype": "body"
+    },
+    {
+      "src": 21,
+      "dst": 22,
+      "etype": "head"
+    },
+    {
+      "src": 18,
+      "dst": 23,
+      "etype": "body"
+    },
+    {
+      "src": 23,
+      "dst": 22,
+      "etype": "head"
+    }
+  ],
+  "proof_steps": [
+    {
+      "step_id": 0,
+      "derived_node": 12,
+      "used_rule": 11,
+      "premises": [
+        4
+      ]
+    }
+  ],
+  "metadata": {
+    "source": "synthetic_horn",
+    "n_facts": 6,
+    "n_rules": 8
+  }
+}

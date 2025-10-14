@@ -1,0 +1,264 @@
+{
+  "id": "horn_1",
+  "nodes": [
+    {
+      "nid": 0,
+      "type": "fact",
+      "label": "P1"
+    },
+    {
+      "nid": 1,
+      "type": "fact",
+      "label": "P6"
+    },
+    {
+      "nid": 2,
+      "type": "fact",
+      "label": "P2"
+    },
+    {
+      "nid": 3,
+      "type": "fact",
+      "label": "P17"
+    },
+    {
+      "nid": 4,
+      "type": "fact",
+      "label": "P12"
+    },
+    {
+      "nid": 5,
+      "type": "fact",
+      "label": "P5"
+    },
+    {
+      "nid": 6,
+      "type": "rule",
+      "label": "P14+P11 -> P12",
+      "body_atoms": [
+        "P14",
+        "P11"
+      ],
+      "head_atom": "P12"
+    },
+    {
+      "nid": 7,
+      "type": "fact",
+      "label": "P14"
+    },
+    {
+      "nid": 8,
+      "type": "fact",
+      "label": "P11"
+    },
+    {
+      "nid": 9,
+      "type": "rule",
+      "label": "P12 -> P1",
+      "body_atoms": [
+        "P12"
+      ],
+      "head_atom": "P1"
+    },
+    {
+      "nid": 10,
+      "type": "rule",
+      "label": "P14 -> P15",
+      "body_atoms": [
+        "P14"
+      ],
+      "head_atom": "P15"
+    },
+    {
+      "nid": 11,
+      "type": "fact",
+      "label": "P15"
+    },
+    {
+      "nid": 12,
+      "type": "rule",
+      "label": "P18 -> P19",
+      "body_atoms": [
+        "P18"
+      ],
+      "head_atom": "P19"
+    },
+    {
+      "nid": 13,
+      "type": "fact",
+      "label": "P18"
+    },
+    {
+      "nid": 14,
+      "type": "fact",
+      "label": "P19"
+    },
+    {
+      "nid": 15,
+      "type": "rule",
+      "label": "P0 -> P3",
+      "body_atoms": [
+        "P0"
+      ],
+      "head_atom": "P3"
+    },
+    {
+      "nid": 16,
+      "type": "fact",
+      "label": "P0"
+    },
+    {
+      "nid": 17,
+      "type": "fact",
+      "label": "P3"
+    },
+    {
+      "nid": 18,
+      "type": "rule",
+      "label": "P13+P1 -> P8",
+      "body_atoms": [
+        "P13",
+        "P1"
+      ],
+      "head_atom": "P8"
+    },
+    {
+      "nid": 19,
+      "type": "fact",
+      "label": "P13"
+    },
+    {
+      "nid": 20,
+      "type": "fact",
+      "label": "P8"
+    },
+    {
+      "nid": 21,
+      "type": "rule",
+      "label": "P11+P1 -> P17",
+      "body_atoms": [
+        "P11",
+        "P1"
+      ],
+      "head_atom": "P17"
+    },
+    {
+      "nid": 22,
+      "type": "rule",
+      "label": "P1+P6 -> P12",
+      "body_atoms": [
+        "P1",
+        "P6"
+      ],
+      "head_atom": "P12"
+    }
+  ],
+  "edges": [
+    {
+      "src": 7,
+      "dst": 6,
+      "etype": "body"
+    },
+    {
+      "src": 8,
+      "dst": 6,
+      "etype": "body"
+    },
+    {
+      "src": 6,
+      "dst": 4,
+      "etype": "head"
+    },
+    {
+      "src": 4,
+      "dst": 9,
+      "etype": "body"
+    },
+    {
+      "src": 9,
+      "dst": 0,
+      "etype": "head"
+    },
+    {
+      "src": 7,
+      "dst": 10,
+      "etype": "body"
+    },
+    {
+      "src": 10,
+      "dst": 11,
+      "etype": "head"
+    },
+    {
+      "src": 13,
+      "dst": 12,
+      "etype": "body"
+    },
+    {
+      "src": 12,
+      "dst": 14,
+      "etype": "head"
+    },
+    {
+      "src": 16,
+      "dst": 15,
+      "etype": "body"
+    },
+    {
+      "src": 15,
+      "dst": 17,
+      "etype": "head"
+    },
+    {
+      "src": 19,
+      "dst": 18,
+      "etype": "body"
+    },
+    {
+      "src": 0,
+      "dst": 18,
+      "etype": "body"
+    },
+    {
+      "src": 18,
+      "dst": 20,
+      "etype": "head"
+    },
+    {
+      "src": 8,
+      "dst": 21,
+      "etype": "body"
+    },
+    {
+      "src": 0,
+      "dst": 21,
+      "etype": "body"
+    },
+    {
+      "src": 21,
+      "dst": 3,
+      "etype": "head"
+    },
+    {
+      "src": 0,
+      "dst": 22,
+      "etype": "body"
+    },
+    {
+      "src": 1,
+      "dst": 22,
+      "etype": "body"
+    },
+    {
+      "src": 22,
+      "dst": 4,
+      "etype": "head"
+    }
+  ],
+  "proof_steps": [],
+  "metadata": {
+    "source": "synthetic_horn",
+    "n_facts": 6,
+    "n_rules": 8
+  }
+}
