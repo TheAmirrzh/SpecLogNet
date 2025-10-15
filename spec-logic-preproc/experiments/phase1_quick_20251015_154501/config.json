@@ -1,0 +1,19 @@
+{
+  "json_dir": "data_processed/phase1_quick_20251015_154501",
+  "spectral_dir": "data_processed/phase1_quick_20251015_154501/spectral",
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 256,
+  "num_layers": 3,
+  "dropout": 0.1,
+  "epochs": 10,
+  "batch_size": 64,
+  "lr": 0.001,
+  "weight_decay": 0.0001,
+  "grad_clip": 1.0,
+  "patience": 20,
+  "exp_name": "phase1_quick_20251015_154501",
+  "log_dir": "experiments",
+  "device": "cpu",
+  "seed": 42
+}

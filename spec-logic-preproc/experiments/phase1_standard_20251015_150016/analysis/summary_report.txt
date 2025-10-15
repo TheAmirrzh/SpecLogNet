@@ -1,0 +1,52 @@
+================================================================================
+PHASE 1: BASELINE EXPERIMENTAL REPORT
+================================================================================
+
+CONFIGURATION
+--------------------------------------------------------------------------------
+  Model: GCN with 2 layers
+  Hidden dimension: 128
+  Dropout: 0.1
+  Learning rate: 0.001
+  Batch size: 1
+  Epochs trained: 50
+  Device: cpu
+  Random seed: 42
+
+TRAINING SUMMARY
+--------------------------------------------------------------------------------
+  Total epochs: 25
+  Training time: 0.01 hours
+
+BEST VALIDATION RESULTS
+--------------------------------------------------------------------------------
+  Loss: 2.9046
+  Hit@1: 0.1282 (12.82%)
+  Hit@3: 0.2949 (29.49%)
+  Hit@10: 0.7949 (79.49%)
+  MRR: 0.2956
+
+FINAL TEST RESULTS
+--------------------------------------------------------------------------------
+  Loss: 3.0768
+  Hit@1: 0.1519 (15.19%)
+  Hit@3: 0.3038 (30.38%)
+  Hit@10: 0.7468 (74.68%)
+  MRR: 0.2966
+  Test samples: 79
+
+KEY FINDINGS
+--------------------------------------------------------------------------------
+  ⚠ NEEDS WORK: Test Hit@1 < 40% - Requires tuning
+  • Top-1 accuracy: 15.2%
+  • Top-10 accuracy: 74.7%
+  • Hit@10 - Hit@1 gap: 59.5% (larger gap = more room for ranking improvements)
+
+NEXT STEPS FOR PHASE 2
+--------------------------------------------------------------------------------
+  1. Implement spectral feature integration
+  2. Run ablation: GCN vs GCN+Spectral
+  3. Analyze which problem types benefit most from spectral features
+  4. Tune spectral encoder architecture (k value, filter types)
+
+================================================================================

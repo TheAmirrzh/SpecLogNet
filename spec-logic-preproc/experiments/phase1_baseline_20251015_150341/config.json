@@ -1,0 +1,19 @@
+{
+  "json_dir": "data_processed/phase1",
+  "spectral_dir": null,
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 128,
+  "num_layers": 2,
+  "dropout": 0.1,
+  "epochs": 100,
+  "batch_size": 1,
+  "lr": 0.0001,
+  "weight_decay": 1e-05,
+  "grad_clip": 1.0,
+  "patience": 15,
+  "exp_name": "baseline",
+  "log_dir": "experiments",
+  "device": "cpu",
+  "seed": 42
+}

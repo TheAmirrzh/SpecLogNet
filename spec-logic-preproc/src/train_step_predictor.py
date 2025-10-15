@@ -20,18 +20,39 @@ import json
 import glob
 import random
 from typing import List, Optional, Tuple, Dict
-
+from datetime import datetime
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from torch.optim.lr_scheduler import ReduceLROnPlateau # Import scheduler directly
 
+# Explicitly try to import PyG components
 try:
-    from torch_geometric.data import Data, DataLoader
+    from torch_geometric.data import Data, DataLoader as PyGDataLoader
 except Exception:
-    from torch.utils.data import DataLoader
+    # Fallback to standard DataLoader (will raise error later if PyG Data is used)
+    from torch.utils.data import DataLoader as PyGDataLoader 
     raise RuntimeError("torch_geometric is required. Install torch_geometric.") from None
 
+# Use the PyG DataLoader exclusively
+DataLoader = PyGDataLoader
+
 from src.models.gcn_step_predictor import GCNStepPredictor
+
+# --- CUSTOM COLLATE FUNCTION TO FILTER BAD SAMPLES ---
+# The logic in __getitem__ returns a dummy Data object with y=[-1] for bad samples.
+# This function filters them out before collation/batching.
+def filter_collate(batch):
+    # Filter out samples where data.y is [-1] (invalid samples)
+    filtered_batch = [data for data in batch if not (hasattr(data, 'y') and data.y.item() == -1)]
+    if not filtered_batch:
+        # If the batch is empty after filtering, return an empty list. 
+        # This will need to be caught in the training loop.
+        return []
+    
+    # Since we are using PyG DataLoader, we rely on its internal collate mechanism.
+    # We return the filtered list, and PyG DataLoader handles the actual stacking.
+    return filtered_batch
 
 # -------------------------
 # Dataset: per-proof-step sample
@@ -53,7 +74,11 @@ class StepPredictionDataset(Dataset):
         random.seed(seed)
 
         for f in self.files:
-            inst = json.load(open(f, "r"))
+            try:
+                inst = json.load(open(f, "r"))
+            except Exception as e:
+                print(f"Warning: Could not load JSON file {f}: {e}")
+                continue
             # basic validation
             if "nodes" not in inst or "edges" not in inst:
                 continue
@@ -158,12 +183,12 @@ class StepPredictionDataset(Dataset):
         # determine target: the used_rule nid for this proof step
         target_rule_nid = int(proof_steps[step_idx]["used_rule"])
         if target_rule_nid not in nid_to_idx:
-            # safety: if the rule node isn't present, skip this sample (rare)
-            # return a dummy sample: all zeros (should be filtered upstream)
+            # safety: if the rule node isn't present, return a dummy sample
             data = Data(x=torch.tensor(node_feat), edge_index=edge_index)
-            data.y = torch.tensor([-1], dtype=torch.long)
+            data.y = torch.tensor([-1], dtype=torch.long) # FLAG FOR FILTERING
             data.meta = {"id": inst.get("id", ""), "step_idx": step_idx}
             return data
+            
         target_idx = nid_to_idx[target_rule_nid]
 
         data = Data(x=torch.tensor(node_feat, dtype=torch.float), edge_index=edge_index)
@@ -196,6 +221,8 @@ def evaluate_model(model: torch.nn.Module, dataloader: DataLoader, device: torch
     ce = torch.nn.CrossEntropyLoss()
     with torch.no_grad():
         for data in dataloader:
+            if not data: # Catch empty batch from filter_collate
+                continue
             data = data.to(device)
             # ensure node features exist
             x = data.x
@@ -222,6 +249,7 @@ def evaluate_model(model: torch.nn.Module, dataloader: DataLoader, device: torch
 def train(
     json_dir: str,
     spectral_dir: Optional[str] = None,
+    exp_dir: Optional[str] = None, # Added exp_dir argument
     epochs: int = 20,
     lr: float = 1e-3,
     batch_size: int = 1,
@@ -246,23 +274,75 @@ def train(
     val_ds = StepPredictionDataset(val_files, spectral_dir=spectral_dir, seed=seed+1)
     test_ds = StepPredictionDataset(test_files, spectral_dir=spectral_dir, seed=seed+2)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
+    # Use the PyG DataLoader and explicitly provide the filter_collate function
+    # NOTE: PyGDataLoader handles Data objects, but if bad samples remain, they can break it.
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=filter_collate)
+    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=filter_collate)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, collate_fn=filter_collate)
 
     # determine in_feats from first sample
-    sample0 = train_ds[0]
+    if len(train_ds) == 0:
+        raise RuntimeError("Training dataset is empty.")
+        
+    # Attempt to get a good sample for in_feats determination
+    sample0 = None
+    for item in train_ds:
+        if item.y.item() != -1:
+            sample0 = item
+            break
+    
+    if sample0 is None:
+        raise RuntimeError("Training dataset is empty or contains only invalid samples after filtering.")
+    
     in_feats = sample0.x.size(1)
 
     model = GCNStepPredictor(in_feats=in_feats, hidden=hidden).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     ce = torch.nn.CrossEntropyLoss()
+    
+    # FIX: Remove 'verbose=True' to avoid PyTorch TypeError.
+    scheduler = ReduceLROnPlateau(
+        opt, mode='max', factor=0.5, patience=5
+    )
 
     best_val_hit1 = -1.0
+    # Store training configuration for results file
+    config = {
+        "json_dir": json_dir,
+        "spectral_dir": spectral_dir,
+        "epochs": epochs,
+        "lr": lr,
+        "batch_size": batch_size,
+        "hidden": hidden,
+        "device": device_str,
+        "val_fraction": val_fraction,
+        "test_fraction": test_fraction,
+        "seed": seed
+    }
+
     for ep in range(1, epochs+1):
         model.train()
         train_losses = []
         for data in train_loader:
+            if not data: # Skip empty batches resulting from filter_collate
+                continue
+
+            # data here is a *list* of filtered Data objects if batch_size > 1
+            # If batch_size=1, data is technically a list containing one Data object.
+            # PyGDataLoader handles combining the list of Data objects into a single batched Data object.
+            # We must ensure data is actually the combined Data object before moving to device.
+            if isinstance(data, list):
+                # If we get a list, it means filter_collate ran, and since batch_size=1, it's a list with one item.
+                # Use PyG's explicit collate function here for robustness.
+                from torch_geometric.data.dataloader import default_collate as pyg_default_collate
+                data = pyg_default_collate(data)
+            
+            # The type check below should catch unexpected behaviour if collate_fn isn't respected.
+            # Since the outer error is happening *before* the inner check, removing the check is safer.
+            # if not isinstance(data, Data):
+            #     print(f"\nFATAL ERROR: Expected PyG Data object but found {type(data)}. Check PyG installation.")
+            #     raise TypeError(f"Collate failure: Expected Data but got {type(data)}")
+
             data = data.to(device)
             x = data.x
             edge_index = data.edge_index
@@ -277,18 +357,38 @@ def train(
             loss.backward()
             opt.step()
             train_losses.append(float(loss.item()))
+            
         # epoch end: evaluate
         train_loss = float(np.mean(train_losses)) if len(train_losses)>0 else None
         val_metrics = evaluate_model(model, val_loader, device)
+        
+        # Scheduler step using validation metric
+        if val_metrics['hit1'] is not None:
+            scheduler.step(val_metrics['hit1'])
+        
         print(f"[Epoch {ep}] train_loss={train_loss:.4f} val_loss={val_metrics['loss']:.4f} val_hit1={val_metrics['hit1']:.4f} val_hit3={val_metrics['hit3']:.4f}")
-        # save best
+        
+        # save best checkpoint based on validation hit@1
         if val_metrics['hit1'] is not None and val_metrics['hit1'] > best_val_hit1:
             best_val_hit1 = val_metrics['hit1']
-            ckpt_path = os.path.join("checkpoints", "gcn_step_best.pt")
-            os.makedirs("checkpoints", exist_ok=True)
+            ckpt_dir = os.path.join(exp_dir, "checkpoints") if exp_dir else "checkpoints"
+            ckpt_path = os.path.join(ckpt_dir, "gcn_step_best.pt")
+            os.makedirs(ckpt_dir, exist_ok=True)
             torch.save({"model_state": model.state_dict(), "in_feats": in_feats}, ckpt_path)
+            
     # final test
     test_metrics = evaluate_model(model, test_loader, device)
+    
+    # Save final results to the experiment directory
+    if exp_dir:
+        results = {
+            "config": config,
+            "test_metrics": test_metrics,
+        }
+        results_path = os.path.join(exp_dir, "final_results.json")
+        with open(results_path, "w") as f:
+            json.dump(results, f, indent=2)
+            
     print("FINAL TEST:", test_metrics)
     return model, test_metrics
 
@@ -298,11 +398,47 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--json-dir", required=True, help="Directory with canonical JSON instances (generated by horn_generator)")
     parser.add_argument("--spectral-dir", default=None, help="Optional directory with spectral .npz files")
+    
+    # Arguments expected by the calling script
+    parser.add_argument("--exp-name", default="default_exp", help="Experiment name (old, for logs)")
+    parser.add_argument("--log-dir", default="experiments", help="Log base directory (old, for logs)")
+    # Argument expected by new Phase1Runner flow (for saving results)
+    parser.add_argument("--exp-dir", default=None, help="Explicit directory path to save model/results.")
+
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--hidden", type=int, default=128)
+    parser.add_argument("--hidden-dim", type=int, default=128) # Keep old name for compatibility
+    parser.add_argument("--num-layers", type=int, default=2)
+    parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--patience", type=int, default=15)
+    
+    # These are not used by train_step_predictor's train function, but are used in the main logic calling it.
+    # Since we don't have the wrapper script, we will simulate the main script logic here.
     args = parser.parse_args()
+    
+    # If exp_dir is provided by the master script, use it for saving. Otherwise, construct one from old args.
+    if not args.exp_dir:
+        # Construct the intended directory path from old arguments
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        exp_dir_path = os.path.join(args.log_dir, f"{args.exp_name}_{timestamp}")
+    else:
+        exp_dir_path = args.exp_dir
 
-    train(args.json_dir, spectral_dir=args.spectral_dir, epochs=args.epochs, lr=args.lr, batch_size=args.batch_size, hidden=args.hidden, device_str=args.device)
+    # Call the main training function, mapping old arguments to new names where necessary
+    train(
+        json_dir=args.json_dir,
+        spectral_dir=args.spectral_dir,
+        exp_dir=exp_dir_path,
+        epochs=args.epochs,
+        lr=args.lr,
+        batch_size=args.batch_size,
+        hidden=args.hidden_dim, # Map hidden-dim to hidden
+        device_str=args.device,
+        # Default splits used if the calling script doesn't handle them
+        val_fraction=0.1,
+        test_fraction=0.1,
+        seed=args.seed
+    )

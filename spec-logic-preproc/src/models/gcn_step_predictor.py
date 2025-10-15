@@ -19,7 +19,7 @@ except Exception as e:
 
 
 class GCNStepPredictor(torch.nn.Module):
-    def __init__(self, in_feats: int, hidden: int = 128, num_layers: int = 2, dropout: float = 0.1):
+    def __init__(self, in_feats: int, hidden: int = 256, num_layers: int = 4, dropout: float = 0.2):
         super().__init__()
         assert num_layers >= 1
         self.convs = torch.nn.ModuleList()
@@ -31,6 +31,11 @@ class GCNStepPredictor(torch.nn.Module):
         self.dropout = dropout
         # scoring head: projects node embedding -> scalar score
         self.score_head = torch.nn.Linear(hidden, 1)
+
+        # Add layer normalization for better training stability
+        self.layer_norms = torch.nn.ModuleList()
+        for _ in range(num_layers):
+            self.layer_norms.append(torch.nn.LayerNorm(hidden))
 
     def forward(self, x, edge_index, batch = None):
         """
@@ -44,6 +49,7 @@ class GCNStepPredictor(torch.nn.Module):
         h = x
         for i, conv in enumerate(self.convs):
             h = conv(h, edge_index)
+            h = self.layer_norms[i](h)  # Apply layer normalization
             if i != len(self.convs) - 1:
                 h = F.relu(h)
                 h = F.dropout(h, p=self.dropout, training=self.training)

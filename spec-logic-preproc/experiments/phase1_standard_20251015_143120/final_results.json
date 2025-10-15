@@ -1,0 +1,47 @@
+{
+  "exp_name": "phase1_standard_20251015_143120",
+  "config": {
+    "json_dir": "data_processed/phase1_standard_20251015_143120",
+    "spectral_dir": "data_processed/phase1_standard_20251015_143120/spectral",
+    "val_fraction": 0.1,
+    "test_fraction": 0.1,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.1,
+    "epochs": 50,
+    "batch_size": 1,
+    "lr": 0.001,
+    "weight_decay": 1e-05,
+    "grad_clip": 1.0,
+    "patience": 15,
+    "exp_name": "phase1_standard_20251015_143120",
+    "log_dir": "experiments",
+    "device": "cpu",
+    "seed": 42
+  },
+  "best_val_metrics": {
+    "train_loss": 2.780368460487699,
+    "val_loss": 2.6444005005318543,
+    "val_hit1": 0.1896551724137931,
+    "val_hit3": 0.4482758620689655,
+    "val_hit5": 0.5172413793103449,
+    "val_hit10": 0.8103448275862069,
+    "val_mrr": 0.3740304303874492,
+    "val_samples": 58,
+    "lr": 0.001,
+    "epoch_time": 0.9750311374664307,
+    "epoch": 6,
+    "timestamp": 6.085144996643066
+  },
+  "test_metrics": {
+    "test_loss": 2.805601622377123,
+    "test_hit1": 0.2077922077922078,
+    "test_hit3": 0.37662337662337664,
+    "test_hit5": 0.5064935064935064,
+    "test_hit10": 0.7272727272727273,
+    "test_mrr": 0.3475667264365905,
+    "test_samples": 77
+  },
+  "total_epochs": 21,
+  "training_time": 20.325932025909424
+}

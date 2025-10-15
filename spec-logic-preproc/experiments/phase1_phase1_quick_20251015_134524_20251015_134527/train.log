@@ -1,0 +1,32 @@
+[2025-10-15 13:45:27] Starting Phase 1 training: phase1_phase1_quick_20251015_134524_20251015_134527
+[2025-10-15 13:45:27] Configuration: {
+  "json_dir": "data_processed/phase1_quick_20251015_134524",
+  "spectral_dir": "data_processed/phase1_quick_20251015_134524/spectral",
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 128,
+  "num_layers": 2,
+  "dropout": 0.1,
+  "epochs": 10,
+  "batch_size": 1,
+  "lr": 0.001,
+  "weight_decay": 1e-05,
+  "grad_clip": 1.0,
+  "patience": 15,
+  "exp_name": "phase1_quick_20251015_134524",
+  "log_dir": "experiments",
+  "device": "cpu",
+  "seed": 42
+}
+[2025-10-15 13:45:27] Using device: cpu
+[2025-10-15 13:45:27] Loading datasets...
+[2025-10-15 13:45:27] Found 52 JSON files
+[2025-10-15 13:45:27] Data split: 42 train, 5 val, 5 test
+[2025-10-15 13:45:27] Dataset sizes: 56 train samples, 3 val, 7 test
+[2025-10-15 13:45:27] Input features dimension: 19
+[2025-10-15 13:45:27] Model parameters: 19,201
+[2025-10-15 13:45:27] 
+================================================================================
+[2025-10-15 13:45:27] Starting training...
+[2025-10-15 13:45:27] ================================================================================
+

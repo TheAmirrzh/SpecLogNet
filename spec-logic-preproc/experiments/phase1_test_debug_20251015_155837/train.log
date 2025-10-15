@@ -1,0 +1,77 @@
+[2025-10-15 15:58:37] Starting Phase 1 training: phase1_test_debug_20251015_155837
+[2025-10-15 15:58:37] Configuration: {
+  "json_dir": "data_processed/phase1_standard_20251015_152632",
+  "spectral_dir": "data_processed/phase1_standard_20251015_152632/spectral",
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "dropout": 0.2,
+  "epochs": 2,
+  "batch_size": 4,
+  "lr": 0.001,
+  "weight_decay": 1e-05,
+  "grad_clip": 1.0,
+  "patience": 20,
+  "exp_name": "test_debug",
+  "log_dir": "experiments",
+  "device": "cpu",
+  "seed": 42
+}
+[2025-10-15 15:58:37] Using device: cpu
+[2025-10-15 15:58:37] Loading datasets...
+[2025-10-15 15:58:37] Found 451 JSON files
+[2025-10-15 15:58:37] Data split: 361 train, 45 val, 45 test
+[2025-10-15 15:58:37] Dataset sizes: 544 train samples, 64 val, 69 test
+[2025-10-15 15:58:37] Input features dimension: 19
+[2025-10-15 15:58:37] Model parameters: 5,505
+[2025-10-15 15:58:37] 
+================================================================================
+[2025-10-15 15:58:37] Starting training...
+[2025-10-15 15:58:37] ================================================================================
+
+[2025-10-15 15:58:37] Epoch 1/2 | Batch 0/136 | Loss: 3.7510
+[2025-10-15 15:58:37] Epoch 1/2 | Batch 50/136 | Loss: 3.3578
+[2025-10-15 15:58:37] Epoch 1/2 | Batch 100/136 | Loss: 2.8532
+[2025-10-15 15:58:38] 
+Epoch 1/2 completed in 1.2s
+  Train Loss:    3.3138
+  Train Hit@1:   0.0699
+  Val Loss:      3.1506
+  Val Hit@1:     0.0625
+  Val Hit@3:     0.2188
+  Val Hit@10:    0.7344
+  Val MRR:       0.2289
+  Overfit Gap:   0.0074
+
+[2025-10-15 15:58:38] Saved best checkpoint (epoch 1)
+[2025-10-15 15:58:38] Epoch 2/2 | Batch 0/136 | Loss: 3.7355
+[2025-10-15 15:58:38] Epoch 2/2 | Batch 50/136 | Loss: 3.0413
+[2025-10-15 15:58:38] Epoch 2/2 | Batch 100/136 | Loss: 2.8058
+[2025-10-15 15:58:39] 
+Epoch 2/2 completed in 1.0s
+  Train Loss:    3.1329
+  Train Hit@1:   0.0515
+  Val Loss:      3.0237
+  Val Hit@1:     0.0625
+  Val Hit@3:     0.2031
+  Val Hit@10:    0.8125
+  Val MRR:       0.2311
+  Overfit Gap:   -0.0110
+
+[2025-10-15 15:58:39] 
+================================================================================
+[2025-10-15 15:58:39] Running final test evaluation...
+[2025-10-15 15:58:39] ================================================================================
+
+[2025-10-15 15:58:39] 
+FINAL TEST RESULTS:
+  Test Loss:   3.3376
+  Test Hit@1:  0.0580
+  Test Hit@3:  0.1594
+  Test Hit@10: 0.5652
+  Test MRR:    0.1908
+  Test Samples: 69
+
+[2025-10-15 15:58:39] 
+Training complete! Results saved to: experiments/phase1_test_debug_20251015_155837

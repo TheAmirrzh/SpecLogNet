@@ -1,0 +1,47 @@
+{
+  "exp_name": "phase1_quick_20251015_142527",
+  "config": {
+    "json_dir": "data_processed/phase1_quick_20251015_142527",
+    "spectral_dir": "data_processed/phase1_quick_20251015_142527/spectral",
+    "val_fraction": 0.1,
+    "test_fraction": 0.1,
+    "hidden_dim": 128,
+    "num_layers": 2,
+    "dropout": 0.1,
+    "epochs": 10,
+    "batch_size": 1,
+    "lr": 0.001,
+    "weight_decay": 1e-05,
+    "grad_clip": 1.0,
+    "patience": 15,
+    "exp_name": "phase1_quick_20251015_142527",
+    "log_dir": "experiments",
+    "device": "cpu",
+    "seed": 42
+  },
+  "best_val_metrics": {
+    "train_loss": 3.115477772320018,
+    "val_loss": 2.9028119246164956,
+    "val_hit1": 0.0,
+    "val_hit3": 0.3333333333333333,
+    "val_hit5": 0.6666666666666666,
+    "val_hit10": 0.6666666666666666,
+    "val_mrr": 0.2119883040935672,
+    "val_samples": 3,
+    "lr": 0.001,
+    "epoch_time": 0.15126609802246094,
+    "epoch": 1,
+    "timestamp": 0.18224120140075684
+  },
+  "test_metrics": {
+    "test_loss": 2.8457201719284058,
+    "test_hit1": 0.5,
+    "test_hit3": 0.5,
+    "test_hit5": 0.5,
+    "test_hit10": 1.0,
+    "test_mrr": 0.5625,
+    "test_samples": 2
+  },
+  "total_epochs": 10,
+  "training_time": 0.9864671230316162
+}

@@ -1,0 +1,33 @@
+[2025-10-15 15:25:12] Starting Phase 1 training: phase1_standard_20251015_152509
+[2025-10-15 15:25:12] Configuration: {
+  "json_dir": "data_processed/phase1_standard_20251015_152509",
+  "spectral_dir": "data_processed/phase1_standard_20251015_152509/spectral",
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 128,
+  "num_layers": 2,
+  "dropout": 0.3,
+  "epochs": 50,
+  "batch_size": 32,
+  "lr": 0.0005,
+  "weight_decay": 0.0001,
+  "grad_clip": 0.5,
+  "patience": 10,
+  "exp_name": "phase1_standard_20251015_152509",
+  "log_dir": "experiments",
+  "device": "mps",
+  "seed": 42
+}
+[2025-10-15 15:25:12] Using device: mps
+[2025-10-15 15:25:12] Loading datasets...
+[2025-10-15 15:25:12] Found 451 JSON files
+[2025-10-15 15:25:12] Data split: 361 train, 45 val, 45 test
+[2025-10-15 15:25:12] Dataset sizes: 565 train samples, 64 val, 72 test
+[2025-10-15 15:25:12] Input features dimension: 19
+[2025-10-15 15:25:12] Model parameters: 19,201
+[2025-10-15 15:25:12] 
+================================================================================
+[2025-10-15 15:25:12] Starting training...
+[2025-10-15 15:25:12] ================================================================================
+
+[2025-10-15 15:25:14] Epoch 1/50 | Batch 0/18 | Loss: 3.4301

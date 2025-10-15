@@ -1,0 +1,159 @@
+[2025-10-15 14:25:30] Starting Phase 1 training: phase1_quick_20251015_142527
+[2025-10-15 14:25:30] Configuration: {
+  "json_dir": "data_processed/phase1_quick_20251015_142527",
+  "spectral_dir": "data_processed/phase1_quick_20251015_142527/spectral",
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 128,
+  "num_layers": 2,
+  "dropout": 0.1,
+  "epochs": 10,
+  "batch_size": 1,
+  "lr": 0.001,
+  "weight_decay": 1e-05,
+  "grad_clip": 1.0,
+  "patience": 15,
+  "exp_name": "phase1_quick_20251015_142527",
+  "log_dir": "experiments",
+  "device": "cpu",
+  "seed": 42
+}
+[2025-10-15 14:25:30] Using device: cpu
+[2025-10-15 14:25:30] Loading datasets...
+[2025-10-15 14:25:30] Found 52 JSON files
+[2025-10-15 14:25:30] Data split: 42 train, 5 val, 5 test
+[2025-10-15 14:25:30] Dataset sizes: 68 train samples, 3 val, 2 test
+[2025-10-15 14:25:30] Input features dimension: 19
+[2025-10-15 14:25:30] Model parameters: 19,201
+[2025-10-15 14:25:30] 
+================================================================================
+[2025-10-15 14:25:30] Starting training...
+[2025-10-15 14:25:30] ================================================================================
+
+[2025-10-15 14:25:30] Epoch 1/10 | Batch 0/68 | Loss: 2.4801
+[2025-10-15 14:25:30] Epoch 1/10 | Batch 50/68 | Loss: 2.2825
+[2025-10-15 14:25:30] 
+Epoch 1/10 completed in 0.2s
+  Train Loss: 3.1155
+  Val Loss:   2.9028
+  Val Hit@1:  0.0000
+  Val Hit@3:  0.3333
+  Val Hit@10: 0.6667
+  Val MRR:    0.2120
+
+[2025-10-15 14:25:30] Saved best checkpoint (epoch 1)
+[2025-10-15 14:25:30] Epoch 2/10 | Batch 0/68 | Loss: 3.1602
+[2025-10-15 14:25:30] Epoch 2/10 | Batch 50/68 | Loss: 2.2807
+[2025-10-15 14:25:30] 
+Epoch 2/10 completed in 0.1s
+  Train Loss: 2.9320
+  Val Loss:   2.6628
+  Val Hit@1:  0.0000
+  Val Hit@3:  0.3333
+  Val Hit@10: 1.0000
+  Val MRR:    0.2500
+
+[2025-10-15 14:25:30] Epoch 3/10 | Batch 0/68 | Loss: 2.8689
+[2025-10-15 14:25:30] Epoch 3/10 | Batch 50/68 | Loss: 3.0659
+[2025-10-15 14:25:30] 
+Epoch 3/10 completed in 0.1s
+  Train Loss: 2.6942
+  Val Loss:   2.3998
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.3889
+
+[2025-10-15 14:25:30] Epoch 4/10 | Batch 0/68 | Loss: 1.7140
+[2025-10-15 14:25:30] Epoch 4/10 | Batch 50/68 | Loss: 0.8583
+[2025-10-15 14:25:30] 
+Epoch 4/10 completed in 0.1s
+  Train Loss: 2.5492
+  Val Loss:   2.2671
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.3889
+
+[2025-10-15 14:25:30] Epoch 5/10 | Batch 0/68 | Loss: 3.8281
+[2025-10-15 14:25:30] Epoch 5/10 | Batch 50/68 | Loss: 2.9905
+[2025-10-15 14:25:30] 
+Epoch 5/10 completed in 0.1s
+  Train Loss: 2.3739
+  Val Loss:   2.1416
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.4444
+
+[2025-10-15 14:25:30] Epoch 6/10 | Batch 0/68 | Loss: 2.7178
+[2025-10-15 14:25:30] Epoch 6/10 | Batch 50/68 | Loss: 2.6547
+[2025-10-15 14:25:30] 
+Epoch 6/10 completed in 0.1s
+  Train Loss: 2.3989
+  Val Loss:   2.0871
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.4444
+
+[2025-10-15 14:25:30] Epoch 7/10 | Batch 0/68 | Loss: 1.9830
+[2025-10-15 14:25:30] Epoch 7/10 | Batch 50/68 | Loss: 2.4401
+[2025-10-15 14:25:30] 
+Epoch 7/10 completed in 0.1s
+  Train Loss: 2.2764
+  Val Loss:   1.9016
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.4444
+
+[2025-10-15 14:25:30] Epoch 8/10 | Batch 0/68 | Loss: 3.6435
+[2025-10-15 14:25:30] Epoch 8/10 | Batch 50/68 | Loss: 1.6986
+[2025-10-15 14:25:30] 
+Epoch 8/10 completed in 0.1s
+  Train Loss: 2.1538
+  Val Loss:   2.0375
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.4444
+
+[2025-10-15 14:25:30] Epoch 9/10 | Batch 0/68 | Loss: 1.7549
+[2025-10-15 14:25:30] Epoch 9/10 | Batch 50/68 | Loss: 2.7242
+[2025-10-15 14:25:30] 
+Epoch 9/10 completed in 0.1s
+  Train Loss: 2.0903
+  Val Loss:   1.9939
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.4444
+
+[2025-10-15 14:25:30] Epoch 10/10 | Batch 0/68 | Loss: 1.3794
+[2025-10-15 14:25:31] Epoch 10/10 | Batch 50/68 | Loss: 1.4936
+[2025-10-15 14:25:31] 
+Epoch 10/10 completed in 0.1s
+  Train Loss: 2.1004
+  Val Loss:   2.0330
+  Val Hit@1:  0.0000
+  Val Hit@3:  1.0000
+  Val Hit@10: 1.0000
+  Val MRR:    0.4444
+
+[2025-10-15 14:25:31] 
+================================================================================
+[2025-10-15 14:25:31] Running final test evaluation...
+[2025-10-15 14:25:31] ================================================================================
+
+[2025-10-15 14:25:31] 
+FINAL TEST RESULTS:
+  Test Loss:   2.8457
+  Test Hit@1:  0.5000
+  Test Hit@3:  0.5000
+  Test Hit@10: 1.0000
+  Test MRR:    0.5625
+  Test Samples: 2
+
+[2025-10-15 14:25:31] 
+Training complete! Results saved to: experiments/phase1_quick_20251015_142527
