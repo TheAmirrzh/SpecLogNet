@@ -118,7 +118,7 @@ class StepPredictionDataset(Dataset):
 
         print(f"Dataset: {valid_samples} samples from {len(self.files)} files")
         print(f"Skipped {skipped_no_proofs} files with no proof steps")
-        
+
         
     def __len__(self):
         return len(self.samples)
@@ -338,6 +338,7 @@ def train(
             "test_metrics": test_metrics,
         }
         results_path = os.path.join(exp_dir, "final_results.json")
+        
         with open(results_path, "w") as f:
             json.dump(results, f, indent=2)
             

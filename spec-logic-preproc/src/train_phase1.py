@@ -212,6 +212,7 @@ def train_phase1(args):
     val_dataset = StepPredictionDataset(val_files, args.spectral_dir, seed=args.seed)
     test_dataset = StepPredictionDataset(test_files, args.spectral_dir, seed=args.seed)
     
+
     # New: Check for empty datasets
     if len(train_dataset) == 0:
         tracker.log_message("ERROR: No valid training samples found. Check data generation for proof_steps.")

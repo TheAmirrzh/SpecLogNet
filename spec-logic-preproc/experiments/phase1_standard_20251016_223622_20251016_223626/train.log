@@ -1,0 +1,24 @@
+[2025-10-16 22:36:26] Using device: cpu
+[2025-10-16 22:36:31] 
+Epoch 1/50 completed in 4.4s
+  Train Loss:    3.2972
+  Train Hit@1:   0.1000
+  Val Loss:      3.0373
+  Val Hit@1:     0.1126
+  Val Hit@3:     0.3113
+  Val Hit@10:    0.8013
+  Val MRR:       0.2930
+  Overfit Gap:   -0.0126
+
+[2025-10-16 22:36:31] Saved best checkpoint (epoch 1)
+[2025-10-16 22:36:35] 
+Epoch 2/50 completed in 4.3s
+  Train Loss:    3.0761
+  Train Hit@1:   0.1057
+  Val Loss:      2.7399
+  Val Hit@1:     0.0927
+  Val Hit@3:     0.2848
+  Val Hit@10:    0.7285
+  Val MRR:       0.2757
+  Overfit Gap:   0.0130
+

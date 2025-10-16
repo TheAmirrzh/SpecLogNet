@@ -176,11 +176,21 @@ def generate_dataset_with_spectral(
         all_stats["by_difficulty"][difficulty.value] = diff_stats
         all_stats["total_instances"] += count
         
-        print(f"  Avg nodes: {diff_stats['avg_nodes']:.1f}")
-        print(f"  Avg edges: {diff_stats['avg_edges']:.1f}")
-        print(f"  Avg proof length: {diff_stats['avg_proof_length']:.1f}")
-        print(f"  Success rate: {diff_stats['success_rate']:.2%}")
-    
+        # --- defensive stats printing: handle empty/missing stats safely ---
+        if isinstance(diff_stats, dict):
+            avg_nodes = diff_stats.get("avg_nodes", 0.0)
+            avg_edges = diff_stats.get("avg_edges", 0.0)
+            avg_proof_length = diff_stats.get("avg_proof_length", 0.0)
+            success_rate = diff_stats.get("success_rate", 0.0)
+        else:
+            avg_nodes = avg_edges = avg_proof_length = success_rate = 0.0
+
+        print(f"  Avg nodes: {avg_nodes:.1f}")
+        print(f"  Avg edges: {avg_edges:.1f}")
+        print(f"  Avg proof length: {avg_proof_length:.1f}")
+        print(f"  Success rate: {success_rate:.2%}")
+        # --- end defensive printing ---`
+
     # Compute overall statistics
     total_samples = len(all_stats["overall_stats"]["avg_nodes"])
     if total_samples > 0:

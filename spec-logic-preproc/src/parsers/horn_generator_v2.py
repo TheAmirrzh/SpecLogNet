@@ -9,6 +9,7 @@ import random
 import os
 from typing import Dict, List, Tuple
 from enum import Enum
+import logging
 
 
 class Difficulty(Enum):
@@ -172,8 +173,102 @@ def generate_stratified_horn_instance(
         # Connect body atoms to rule (atoms are GUARANTEED to exist now)
         for atom, is_neg in zip(body_atoms, body_negations):
             label_str = f"~{atom}" if is_neg else atom
+            print("DEBUG: label_str =", label_str)
+            print("DEBUG: fact node labels:", [n.get("label") for n in nodes if n.get("type") == "fact"])
+
             # Find the fact node (MUST exist)
-            fact_node = next(n for n in nodes if n["type"] == "fact" and n["label"] == label_str)
+            # --- robust fact_node lookup and fallback creation ---
+            # --- robust fact node lookup + safe fallback (replace existing lookup block) ---
+        fact_node = next(
+            (n for n in nodes if n.get("type") == "fact" and n.get("label") == label_str),
+            None
+        )
+
+        if fact_node is None:
+            import logging
+
+            # Build the obvious alternative label (flip leading '~')
+            if isinstance(label_str, str) and label_str.startswith("~"):
+                alt_label = label_str[1:]
+            else:
+                alt_label = f"~{label_str}"
+
+            alt_node = next(
+                (n for n in nodes if n.get("type") == "fact" and n.get("label") == alt_label),
+                None
+            )
+
+            if alt_node is not None:
+                logging.warning(
+                    "Requested fact label '%s' missing, but alternative '%s' exists. Creating explicit fact node for '%s'.",
+                    label_str, alt_label, label_str
+                )
+
+                # Clone alt_node to preserve any extra metadata (features, attrs)
+                new_node = alt_node.copy()
+
+                # Generate a new unique nid (prefer numeric if existing nids are ints)
+                existing_nids = [n.get("nid") for n in nodes if n.get("nid") is not None]
+                int_nids = [x for x in existing_nids if isinstance(x, int)]
+                if int_nids:
+                    new_nid = max(int_nids) + 1
+                else:
+                    # try 'id' numeric fallback
+                    existing_ids = [n.get("id") for n in nodes if n.get("id") is not None]
+                    int_ids = [x for x in existing_ids if isinstance(x, int)]
+                    if int_ids:
+                        new_nid = max(int_ids) + 1
+                    else:
+                        # final fallback: string-based unique nid
+                        new_nid = f"nid_auto_{len(nodes)}"
+
+                new_node["nid"] = new_nid
+
+                # Keep id consistent if present
+                if "id" in new_node:
+                    if isinstance(new_node["id"], int):
+                        new_node["id"] = new_nid
+                    else:
+                        new_node["id"] = f"auto_{new_nid}"
+
+                # Update label to the requested literal
+                new_node["label"] = label_str
+
+                # Append and use the cloned node
+                nodes.append(new_node)
+                fact_node = new_node
+
+            else:
+                # No alternative found — create a minimal fact node with expected keys.
+                logging.warning(
+                    "Requested fact label '%s' is missing and no alternative '%s' found. Creating minimal fact node.",
+                    label_str, alt_label
+                )
+
+                # Determine numeric nid if possible, otherwise unique string
+                existing_nids = [n.get("nid") for n in nodes if n.get("nid") is not None]
+                int_nids = [x for x in existing_nids if isinstance(x, int)]
+                if int_nids:
+                    new_nid = max(int_nids) + 1
+                else:
+                    existing_ids = [n.get("id") for n in nodes if n.get("id") is not None]
+                    int_ids = [x for x in existing_ids if isinstance(x, int)]
+                    if int_ids:
+                        new_nid = max(int_ids) + 1
+                    else:
+                        new_nid = f"nid_auto_{len(nodes)}"
+
+                new_node = {
+                    "nid": new_nid,
+                    "id": new_nid if isinstance(new_nid, int) else f"auto_{new_nid}",
+                    "type": "fact",
+                    "label": label_str
+                }
+                nodes.append(new_node)
+                fact_node = new_node
+        # --- end robust lookup ---
+
+
             edges.append({"src": fact_node["nid"], "dst": rule_nid, "etype": "body"})
         
         # Connect rule to head fact
