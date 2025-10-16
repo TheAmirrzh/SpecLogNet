@@ -167,10 +167,11 @@ def generate_dataset_with_spectral(
             all_stats["overall_stats"]["avg_graph_density"].append(meta["graph_density"])
         
         # Finalize difficulty stats
-        diff_stats["avg_nodes"] /= count
-        diff_stats["avg_edges"] /= count
-        diff_stats["avg_proof_length"] /= count
-        diff_stats["success_rate"] = diff_stats["successful_proofs"] / count
+        if count > 0:  # Avoid ZeroDivisionError
+            diff_stats["avg_nodes"] /= count
+            diff_stats["avg_edges"] /= count
+            diff_stats["avg_proof_length"] /= count
+            diff_stats["success_rate"] = diff_stats["successful_proofs"] / count
         
         all_stats["by_difficulty"][difficulty.value] = diff_stats
         all_stats["total_instances"] += count
@@ -181,15 +182,17 @@ def generate_dataset_with_spectral(
         print(f"  Success rate: {diff_stats['success_rate']:.2%}")
     
     # Compute overall statistics
-    for key in ["avg_nodes", "avg_edges", "avg_proof_length", "avg_graph_density"]:
-        values = all_stats["overall_stats"][key]
-        all_stats["overall_stats"][key] = {
-            "mean": float(np.mean(values)),
-            "std": float(np.std(values)),
-            "min": float(np.min(values)),
-            "max": float(np.max(values)),
-            "median": float(np.median(values))
-        }
+    total_samples = len(all_stats["overall_stats"]["avg_nodes"])
+    if total_samples > 0:
+        for key in ["avg_nodes", "avg_edges", "avg_proof_length", "avg_graph_density"]:
+            values = all_stats["overall_stats"][key]
+            all_stats["overall_stats"][key] = {
+                "mean": float(np.mean(values)),
+                "std": float(np.std(values)),
+                "min": float(np.min(values)),
+                "max": float(np.max(values)),
+                "median": float(np.median(values))
+            }
     
     # Save statistics
     stats_path = os.path.join(stats_dir, "dataset_info.json")

@@ -146,35 +146,36 @@ def generate_stratified_horn_instance(
         body_nids = []
         for atom, is_neg in zip(body_atoms, body_negations):
             label_str = f"~{atom}" if is_neg else atom
-            # Find or create fact node
+            # Find or create fact node for body atom if not exists
             found = next((n for n in nodes if n["type"] == "fact" and n["label"] == label_str), None)
-            if found:
-                b_nid = found["nid"]
-            else:
-                b_nid = _next_nid(nid_counter)
+            if not found:
+                body_nid = _next_nid(nid_counter)
                 nodes.append({
-                    "nid": b_nid,
+                    "nid": body_nid,
                     "type": "fact",
                     "label": label_str,
                     "atom": atom,
                     "negated": is_neg
                 })
-            body_nids.append(b_nid)
-            edges.append({"src": b_nid, "dst": rule_nid, "etype": "body"})
+            else:
+                body_nid = found["nid"]
+            body_nids.append(body_nid)
+            edges.append({"src": body_nid, "dst": rule_nid, "etype": "body"})
         
-        # Connect rule to head fact
-        found_head = next((n for n in nodes if n["type"] == "fact" and n["label"] == head_atom), None)
-        if found_head:
-            head_nid = found_head["nid"]
-        else:
+        # Connect rule to head fact (create if not exists)
+        head_label = head_atom
+        head_found = next((n for n in nodes if n["type"] == "fact" and n["label"] == head_label), None)
+        if not head_found:
             head_nid = _next_nid(nid_counter)
             nodes.append({
                 "nid": head_nid,
                 "type": "fact",
-                "label": head_atom,
+                "label": head_label,
                 "atom": head_atom,
                 "negated": False
             })
+        else:
+            head_nid = head_found["nid"]
         edges.append({"src": rule_nid, "dst": head_nid, "etype": "head"})
     
     # Forward-chaining proof generation

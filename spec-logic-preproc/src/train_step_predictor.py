@@ -39,20 +39,48 @@ DataLoader = PyGDataLoader
 
 from src.models.gcn_step_predictor import GCNStepPredictor
 
-# --- CUSTOM COLLATE FUNCTION TO FILTER BAD SAMPLES ---
-# The logic in __getitem__ returns a dummy Data object with y=[-1] for bad samples.
-# This function filters them out before collation/batching.
-def filter_collate(batch):
-    # Filter out samples where data.y is [-1] (invalid samples)
-    filtered_batch = [data for data in batch if not (hasattr(data, 'y') and data.y.item() == -1)]
-    if not filtered_batch:
-        # If the batch is empty after filtering, return an empty list. 
-        # This will need to be caught in the training loop.
-        return []
+
+def hit_at_k(scores: torch.Tensor, target_idx: int, k: int) -> float:
+    """Hit@K metric: 1 if target in top-k, else 0. Clamps k for small graphs."""
+    effective_k = min(k, len(scores))
+    if effective_k == 0:
+        return 0.0
+    top_k = torch.topk(scores, effective_k).indices
+    return 1.0 if target_idx in top_k else 0.0
+
+
+def evaluate_model(model, dataloader, device):
+    """Evaluate model on dataset, returning avg loss and Hit@K."""
+    model.eval()
+    losses = []
+    hit1, hit3, hit10 = [], [], []
+    ce = torch.nn.CrossEntropyLoss()
     
-    # Since we are using PyG DataLoader, we rely on its internal collate mechanism.
-    # We return the filtered list, and PyG DataLoader handles the actual stacking.
-    return filtered_batch
+    with torch.no_grad():
+        for data in dataloader:
+            data = data.to(device)
+            scores, _ = model(data.x, data.edge_index)
+            target_idx = int(data.y.item())
+            
+            if target_idx < 0:
+                continue
+            
+            logits = scores.unsqueeze(0)
+            targ = torch.tensor([target_idx], dtype=torch.long, device=device)
+            loss = ce(logits, targ)
+            losses.append(float(loss.item()))
+            
+            hit1.append(hit_at_k(scores, target_idx, 1))
+            hit3.append(hit_at_k(scores, target_idx, 3))
+            hit10.append(hit_at_k(scores, target_idx, 10))
+    
+    return {
+        "loss": np.mean(losses) if losses else None,
+        "hit1": np.mean(hit1) if hit1 else None,
+        "hit3": np.mean(hit3) if hit3 else None,
+        "hit10": np.mean(hit10) if hit10 else None
+    }
+
 
 # -------------------------
 # Dataset: per-proof-step sample
@@ -69,7 +97,7 @@ class StepPredictionDataset(Dataset):
 
     def __init__(self, json_files: List[str], spectral_dir: Optional[str] = None, seed: Optional[int] = 0):
         self.files = json_files
-        self.samples: List[Dict] = []  # will hold tuples (canonical_instance, proof_step_index)
+        self.samples: List[Tuple[Dict, int]] = []  # will hold tuples (canonical_instance, proof_step_index)
         self.spectral_dir = spectral_dir
         random.seed(seed)
 
@@ -110,238 +138,145 @@ class StepPredictionDataset(Dataset):
 
     def _load_spectral(self, inst_id: str) -> Optional[np.ndarray]:
         if self.spectral_dir is None:
+            print(f"WARNING: spectral_dir is None, spectral features will not be used")
             return None
-        # find any matching npz file that starts with inst_id
-        cand = glob.glob(os.path.join(self.spectral_dir, f"{inst_id}_spectral_k*"))
-        if not cand:
+        if not inst_id:
+            # If instance ID is missing from the JSON, we can't find the spectral file.
+            print(f"WARNING: Instance ID is missing, cannot load spectral features")
             return None
-        data = np.load(cand[0])
-        eigvecs = data["eigvecs"]  # shape (n_nodes, k)
-        return eigvecs
+
+        # Find any spectral file for this instance ID, regardless of k.
+        # This is more robust than hardcoding k.
+        pattern = os.path.join(self.spectral_dir, f"{inst_id}_spectral_k*.npz")
+        candidates = glob.glob(pattern)
+
+        if not candidates:
+            # This is the critical point: if no file is found, we now print a warning
+            print(f"WARNING: Spectral file not found for pattern: {pattern}")
+            print(f"Spectral features will not be added to the model input")
+            return None
+        
+        spectral_data = np.load(candidates[0])["eigvecs"]
+        return spectral_data
 
     def __getitem__(self, idx):
         inst, step_idx = self.samples[idx]
         nodes = inst["nodes"]
         edges = inst["edges"]
         proof_steps = inst.get("proof_steps", [])
-        assert 0 <= step_idx < len(proof_steps)
-
-        # ordering & mapping
-        nodes_sorted = sorted(nodes, key=lambda x: int(x["nid"]))
-        nid_to_idx = {int(n["nid"]): i for i, n in enumerate(nodes_sorted)}
-        n_nodes = len(nodes_sorted)
-
-        # initial facts + derived before this step
+        
+        # Map nids to consecutive indices 0..N-1
+        id2idx = self._node_order_map(nodes)
+        
+        # Node features: one-hot type (fact=0, rule=1) + derived flag (0/1)
+        n_nodes = len(nodes)
+        x = torch.zeros((n_nodes, 2), dtype=torch.float)  # [type_onehot(1), derived(1)]
+        
+        # Derived facts up to this step
+        derived_up_to_step = set(int(s["derived_node"]) for s in proof_steps[:step_idx+1])
         initial_facts = self._compute_initial_facts(inst)
-        derived = set(initial_facts)
-        for s in proof_steps[:step_idx]:
-            derived.add(int(s["derived_node"]))
-
-        # node type one-hot
-        types = [n.get("type", "unk") for n in nodes_sorted]
-        uniq_types = sorted(list(set(types)))
-        type2i = {t:i for i,t in enumerate(uniq_types)}
-        type_feat = np.zeros((n_nodes, len(uniq_types)), dtype=np.float32)
-        for i,t in enumerate(types):
-            type_feat[i, type2i[t]] = 1.0
-
-        # derived flag
-        derived_flag = np.zeros((n_nodes, 1), dtype=np.float32)
-        for nid in derived:
-            if nid in nid_to_idx:
-                derived_flag[nid_to_idx[nid], 0] = 1.0
-
-        # spectral (optional)
-        spectral = self._load_spectral(inst.get("id", ""))
-        if spectral is not None:
-            # attempt to align size
-            if spectral.shape[0] != n_nodes:
-                # try to match by node id ordering: spectral assumed to follow node order by nid.
-                # fallback to truncation/padding
-                k = spectral.shape[1]
-                if spectral.shape[0] < n_nodes:
-                    pad = np.zeros((n_nodes - spectral.shape[0], k), dtype=np.float32)
-                    spectral = np.vstack([spectral, pad])
-                else:
-                    spectral = spectral[:n_nodes, :]
-            node_feat = np.concatenate([type_feat, derived_flag, spectral.astype(np.float32)], axis=1)
-        else:
-            node_feat = np.concatenate([type_feat, derived_flag], axis=1)
-
-        # build edge_index (map global nids -> 0..n-1 indices)
-        src = []
-        dst = []
+        
+        for node in nodes:
+            idx = id2idx[int(node["nid"])]
+            ntype = 0 if node["type"] == "fact" else 1
+            derived = 1 if int(node["nid"]) in derived_up_to_step else 0
+            x[idx] = torch.tensor([ntype, derived])
+        
+        # Optional: append spectral features
+        spectral_feats = self._load_spectral(inst.get("id", ""))
+        if spectral_feats is not None:
+            spectral_feats = torch.from_numpy(spectral_feats).float()  # (N, k)
+            x = torch.cat([x, spectral_feats], dim=-1)
+        
+        # Edges: src/dst using idx
+        edge_index = []
         for e in edges:
-            s = int(e["src"]); d = int(e["dst"])
-            if s in nid_to_idx and d in nid_to_idx:
-                src.append(nid_to_idx[s]); dst.append(nid_to_idx[d])
-        if len(src) == 0:
-            edge_index = torch.empty((2,0), dtype=torch.long)
-        else:
-            edge_index = torch.tensor([src, dst], dtype=torch.long)
-
-        # determine target: the used_rule nid for this proof step
-        target_rule_nid = int(proof_steps[step_idx]["used_rule"])
-        if target_rule_nid not in nid_to_idx:
-            # safety: if the rule node isn't present, return a dummy sample
-            data = Data(x=torch.tensor(node_feat), edge_index=edge_index)
-            data.y = torch.tensor([-1], dtype=torch.long) # FLAG FOR FILTERING
-            data.meta = {"id": inst.get("id", ""), "step_idx": step_idx}
-            return data
-            
-        target_idx = nid_to_idx[target_rule_nid]
-
-        data = Data(x=torch.tensor(node_feat, dtype=torch.float), edge_index=edge_index)
-        data.y = torch.tensor([target_idx], dtype=torch.long)  # store as (1,)
-        data.meta = {"id": inst.get("id", ""), "step_idx": step_idx, "n_nodes": n_nodes}
+            src_idx = id2idx[int(e["src"])]
+            dst_idx = id2idx[int(e["dst"])]
+            edge_index.append([src_idx, dst_idx])
+        
+        edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
+        
+        # Target: index of the rule node used in this step
+        step = proof_steps[step_idx]
+        rule_nid = int(step["used_rule"])
+        y = torch.tensor([id2idx[rule_nid]], dtype=torch.long)
+        
+        # PyG Data
+        data = Data(x=x, edge_index=edge_index, y=y)
+        data.meta = {"instance_id": inst.get("id", ""), "step_idx": step_idx}
+        
         return data
 
-# -------------------------
-# Helper metrics
-# -------------------------
-def hit_at_k(scores: torch.Tensor, target_idx: int, k: int) -> int:
-    """
-    scores: (N,) tensor of node scores (higher = better)
-    target_idx: int index in 0..N-1
-    returns 1 if target in top-k else 0
-    """
-    N = scores.size(0)
-    k = min(k, N)
-    topk = torch.topk(scores, k=k, largest=True).indices.tolist()
-    return 1 if target_idx in topk else 0
-
-# -------------------------
-# Training & evaluation
-# -------------------------
-def evaluate_model(model: torch.nn.Module, dataloader: DataLoader, device: torch.device = torch.device("cpu")) -> Dict:
-    model.eval()
-    total = 0
-    loss_sum = 0.0
-    hits = {1:0, 3:0, 10:0}
-    ce = torch.nn.CrossEntropyLoss()
-    with torch.no_grad():
-        for data in dataloader:
-            if not data: # Catch empty batch from filter_collate
-                continue
-            data = data.to(device)
-            # ensure node features exist
-            x = data.x
-            edge_index = data.edge_index
-            scores, _ = model(x, edge_index)
-            # scores shape (N,)
-            target_tensor = data.y.view(-1)  # (1,)
-            target_idx = int(target_tensor.item())
-            if target_idx < 0:
-                continue
-            # compute loss: reshape logits to (1, N) and target (1,)
-            logits = scores.unsqueeze(0)
-            targ = torch.tensor([target_idx], dtype=torch.long, device=device)
-            loss = ce(logits, targ)
-            loss_sum += float(loss.item())
-            total += 1
-            # hits
-            for k in hits.keys():
-                hits[k] += hit_at_k(scores, target_idx, k)
-    if total == 0:
-        return {"loss": None, "hit1": None, "hit3": None, "hit10": None, "n": 0}
-    return {"loss": loss_sum / total, "hit1": hits[1]/total, "hit3": hits[3]/total, "hit10": hits[10]/total, "n": total}
 
 def train(
     json_dir: str,
     spectral_dir: Optional[str] = None,
-    exp_dir: Optional[str] = None, # Added exp_dir argument
+    exp_dir: Optional[str] = None,
     epochs: int = 20,
     lr: float = 1e-3,
     batch_size: int = 1,
     hidden: int = 128,
+    num_layers: int = 2,
+    dropout: float = 0.1,
     device_str: str = "cpu",
     val_fraction: float = 0.1,
     test_fraction: float = 0.1,
     seed: int = 42
 ):
-    device = torch.device(device_str)
-    # collect json files
-    files = sorted(glob.glob(os.path.join(json_dir, "*.json")))
-    random.Random(seed).shuffle(files)
-    n = len(files)
-    n_test = max(1, int(n * test_fraction))
-    n_val = max(1, int(n * val_fraction))
-    train_files = files[: max(0, n - n_val - n_test)]
-    val_files = files[n - n_val - n_test: n - n_test]
-    test_files = files[n - n_test:]
-
-    train_ds = StepPredictionDataset(train_files, spectral_dir=spectral_dir, seed=seed)
-    val_ds = StepPredictionDataset(val_files, spectral_dir=spectral_dir, seed=seed+1)
-    test_ds = StepPredictionDataset(test_files, spectral_dir=spectral_dir, seed=seed+2)
-
-    # Use the PyG DataLoader and explicitly provide the filter_collate function
-    # NOTE: PyGDataLoader handles Data objects, but if bad samples remain, they can break it.
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=filter_collate)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=filter_collate)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, collate_fn=filter_collate)
-
-    # determine in_feats from first sample
-    if len(train_ds) == 0:
-        raise RuntimeError("Training dataset is empty.")
-        
-    # Attempt to get a good sample for in_feats determination
-    sample0 = None
-    for item in train_ds:
-        if item.y.item() != -1:
-            sample0 = item
-            break
+    """Train GCNStepPredictor on dataset."""
+    device = torch.device(device_str if torch.cuda.is_available() else "cpu")
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
     
-    if sample0 is None:
-        raise RuntimeError("Training dataset is empty or contains only invalid samples after filtering.")
+    # Load and split files
+    all_files = glob.glob(os.path.join(json_dir, "**/*.json"), recursive=True)
+    random.shuffle(all_files)
     
-    in_feats = sample0.x.size(1)
-
-    model = GCNStepPredictor(in_feats=in_feats, hidden=hidden).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
+    n_total = len(all_files)
+    n_val = int(n_total * val_fraction)
+    n_test = int(n_total * test_fraction)
+    n_train = n_total - n_val - n_test
+    
+    train_files = all_files[:n_train]
+    val_files = all_files[n_train:n_train + n_val]
+    test_files = all_files[n_train + n_val:]
+    
+    train_dataset = StepPredictionDataset(train_files, spectral_dir, seed)
+    val_dataset = StepPredictionDataset(val_files, spectral_dir, seed)
+    test_dataset = StepPredictionDataset(test_files, spectral_dir, seed)
+    
+    if len(train_dataset) == 0:
+        raise ValueError("No valid training samples found.")
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    
+    # Model
+    in_feats = train_dataset[0].x.shape[1]
+    model = GCNStepPredictor(in_feats, hidden, num_layers, dropout).to(device)
+    
+    # Optimizer and scheduler
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = ReduceLROnPlateau(opt, mode='max', factor=0.5, patience=5, verbose=True)
+    
     ce = torch.nn.CrossEntropyLoss()
     
-    # FIX: Remove 'verbose=True' to avoid PyTorch TypeError.
-    scheduler = ReduceLROnPlateau(
-        opt, mode='max', factor=0.5, patience=5
-    )
-
-    best_val_hit1 = -1.0
-    # Store training configuration for results file
-    config = {
-        "json_dir": json_dir,
-        "spectral_dir": spectral_dir,
-        "epochs": epochs,
-        "lr": lr,
-        "batch_size": batch_size,
-        "hidden": hidden,
-        "device": device_str,
-        "val_fraction": val_fraction,
-        "test_fraction": test_fraction,
-        "seed": seed
-    }
-
+    # Training
+    best_val_hit1 = -float('inf')
+    if exp_dir:
+        os.makedirs(exp_dir, exist_ok=True)
+    
     for ep in range(1, epochs+1):
         model.train()
         train_losses = []
         for data in train_loader:
-            if not data: # Skip empty batches resulting from filter_collate
-                continue
-
-            # data here is a *list* of filtered Data objects if batch_size > 1
-            # If batch_size=1, data is technically a list containing one Data object.
-            # PyGDataLoader handles combining the list of Data objects into a single batched Data object.
-            # We must ensure data is actually the combined Data object before moving to device.
-            if isinstance(data, list):
-                # If we get a list, it means filter_collate ran, and since batch_size=1, it's a list with one item.
-                # Use PyG's explicit collate function here for robustness.
-                from torch_geometric.data.dataloader import default_collate as pyg_default_collate
-                data = pyg_default_collate(data)
-            
-            # The type check below should catch unexpected behaviour if collate_fn isn't respected.
-            # Since the outer error is happening *before* the inner check, removing the check is safer.
-            # if not isinstance(data, Data):
-            #     print(f"\nFATAL ERROR: Expected PyG Data object but found {type(data)}. Check PyG installation.")
-            #     raise TypeError(f"Collate failure: Expected Data but got {type(data)}")
+            # Explicitly check if the correct DataLoader type is being used.
+            if not isinstance(data, Data):
+                print(f"\nFATAL ERROR: Expected PyG Data object but found {type(data)}. Check PyG installation.")
+                raise TypeError(f"Collate failure: Expected Data but got {type(data)}")
 
             data = data.to(device)
             x = data.x
@@ -382,7 +317,7 @@ def train(
     # Save final results to the experiment directory
     if exp_dir:
         results = {
-            "config": config,
+            "config": {"epochs": epochs, "lr": lr, "hidden": hidden, "num_layers": num_layers},
             "test_metrics": test_metrics,
         }
         results_path = os.path.join(exp_dir, "final_results.json")
@@ -436,6 +371,8 @@ if __name__ == "__main__":
         lr=args.lr,
         batch_size=args.batch_size,
         hidden=args.hidden_dim, # Map hidden-dim to hidden
+        num_layers=args.num_layers,
+        dropout=args.dropout,
         device_str=args.device,
         # Default splits used if the calling script doesn't handle them
         val_fraction=0.1,

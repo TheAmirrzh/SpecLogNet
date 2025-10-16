@@ -8,9 +8,9 @@ Master script to run complete Phase 1 workflow:
 5. Generate report
 
 Usage:
-    python run_phase1_complete.py --quick       # Quick test (50 instances)
-    python run_phase1_complete.py --standard    # Standard run (450 instances)
-    python run_phase1_complete.py --full        # Full dataset (1000+ instances)
+    python run_phase1_complete.py --quick       # Quick test (50 instances, 10 epochs)
+    python run_phase1_complete.py --standard    # Standard run (450 instances, 50 epochs)
+    python run_phase1_complete.py --full        # Full dataset (1000+ instances, 100 epochs)
 """
 
 import os
@@ -36,7 +36,6 @@ class Phase1Runner:
                 "n_easy": 20,
                 "n_medium": 20,
                 "n_hard": 10,
-                # TEMPORARY FIX: Set n_extreme to 1 to avoid ZeroDivisionError in stats calculation.
                 "n_extreme": 1, 
                 "epochs": 10,
                 "description": "Quick test run"
@@ -129,49 +128,29 @@ class Phase1Runner:
             sys.executable, "-m", "src.train_phase1",
             "--json-dir", str(self.data_dir),
             "--spectral-dir", str(self.data_dir / "spectral"),
-            
-            # Revert to old argument names as required by train_phase1.py usage.
-            "--exp-name", exp_name, 
-            "--log-dir", str(log_dir), 
-            
-            # FIXED: High-performance hyperparameters
-            "--hidden-dim", "256",      # Larger capacity for better learning
-            "--num-layers", "4",        # Deeper network for complex reasoning
-            "--dropout", "0.2",         # Better regularization
-            "--lr", "3e-4",             # Lower, more stable learning rate
-            "--weight-decay", "1e-4",   # Light regularization
-            "--batch-size", "256",       # Optimal batch size for GNNs
+            "--exp-name", exp_name,
+            "--log-dir", str(log_dir),
+            "--hidden-dim", "128",
+            "--num-layers", "3",
+            "--dropout", "0.1",
             "--epochs", str(self.config["epochs"]),
+            "--batch-size", "32",
+            "--lr", "0.001",
+            "--weight-decay", "1e-5",
+            "--grad-clip", "1.0",
+            "--patience", "15",
             "--device", self.device,
-            "--seed", str(self.seed),
-            "--patience", "20",     # More patience for convergence
-            "--grad-clip", "1.0"    # Standard gradient clipping
+            "--seed", str(self.seed)
         ]
         
         return self.run_command(cmd, "Baseline Training")
     
     def step3_analyze_results(self):
-        """Step 3: Analyze results and generate visualizations."""
-        latest_exp = self.exp_dir
-        
-        # DIAGNOSTIC CHECKPOINT
-        print(f"*** CHECKPOINT 2: Analyzing expects directory at absolute path: {latest_exp.resolve()}")
-
-        if not latest_exp.exists():
-            print(f"❌ No experiment directory found at expected path: {latest_exp}")
-            return False
-
-        # Check for the expected results file saved by the training script
-        final_results_path = latest_exp / "final_results.json"
-        if not final_results_path.exists():
-            print(f"❌ Could not find required results file: {final_results_path}")
-            return False
-
+        """Step 3: Analyze training results."""
         cmd = [
             sys.executable, "-m", "src.scripts.analyze_phase1_results",
-            "--exp-dir", str(latest_exp)
+            "--exp-dir", str(self.exp_dir)
         ]
-        
         return self.run_command(cmd, "Results Analysis")
     
     def step4_generate_summary(self):
@@ -299,18 +278,18 @@ def main():
     # Mode selection (mutually exclusive)
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument("--quick", action="store_true",
-                           help="Quick test mode (50 instances, 10 epochs)")
+                            help="Quick test mode (50 instances, 10 epochs)")
     mode_group.add_argument("--standard", action="store_true",
-                           help="Standard mode (450 instances, 50 epochs)")
+                            help="Standard mode (450 instances, 50 epochs)")
     mode_group.add_argument("--full", action="store_true",
-                           help="Full mode (1000+ instances, 100 epochs)")
+                            help="Full mode (1000+ instances, 100 epochs)")
     
     # Other options
     parser.add_argument("--device", type=str, default="cpu",
-                       choices=["cpu", "cuda", "mps"],
-                       help="Device to use for training")
+                        choices=["cpu", "cuda", "mps"],
+                        help="Device to use for training")
     parser.add_argument("--seed", type=int, default=42,
-                       help="Random seed")
+                        help="Random seed")
     
     args = parser.parse_args()
     

@@ -10,6 +10,7 @@ Complete Phase 1 training script with:
 import os
 import json
 import glob
+import random
 import time
 import argparse
 from datetime import datetime
@@ -143,12 +144,13 @@ def compute_detailed_metrics(model, dataloader, device, dataset_name="val"):
                     metrics[f"{dataset_name}_samples"] += 1
             else:
                 # Single graph case
-                target_idx = int(data.y.view(-1).item())
+                graph_scores = scores
+                target_idx = int(data.y.item())
                 
-                if target_idx < 0:
+                if target_idx < 0 or target_idx >= len(graph_scores):
                     continue
                 
-                logits = scores.unsqueeze(0)
+                logits = graph_scores.unsqueeze(0)
                 targ = torch.tensor([target_idx], dtype=torch.long, device=device)
                 
                 # Loss
@@ -156,186 +158,135 @@ def compute_detailed_metrics(model, dataloader, device, dataset_name="val"):
                 metrics[f"{dataset_name}_loss"] += float(loss.item())
                 
                 # Hit@K metrics
-                metrics[f"{dataset_name}_hit1"] += hit_at_k(scores, target_idx, 1)
-                metrics[f"{dataset_name}_hit3"] += hit_at_k(scores, target_idx, 3)
-                metrics[f"{dataset_name}_hit5"] += hit_at_k(scores, target_idx, 5)
-                metrics[f"{dataset_name}_hit10"] += hit_at_k(scores, target_idx, 10)
+                metrics[f"{dataset_name}_hit1"] += hit_at_k(graph_scores, target_idx, 1)
+                metrics[f"{dataset_name}_hit3"] += hit_at_k(graph_scores, target_idx, 3)
+                metrics[f"{dataset_name}_hit5"] += hit_at_k(graph_scores, target_idx, 5)
+                metrics[f"{dataset_name}_hit10"] += hit_at_k(graph_scores, target_idx, 10)
                 
                 # MRR: 1 / rank of correct answer
-                sorted_scores = torch.argsort(scores, descending=True)
+                sorted_scores = torch.argsort(graph_scores, descending=True)
                 rank = (sorted_scores == target_idx).nonzero(as_tuple=True)[0].item() + 1
                 metrics[f"{dataset_name}_mrr"] += 1.0 / rank
                 
                 metrics[f"{dataset_name}_samples"] += 1
     
-    # Normalize
-    n = max(1, metrics[f"{dataset_name}_samples"])
-    for key in metrics:
-        if key != f"{dataset_name}_samples":
-            metrics[key] /= n
+    # Average metrics
+    if metrics[f"{dataset_name}_samples"] > 0:
+        for key in metrics:
+            if key != f"{dataset_name}_samples":
+                metrics[key] /= metrics[f"{dataset_name}_samples"]
+    else:
+        # New: Handle empty dataset
+        print(f"Warning: No samples in {dataset_name} dataset - metrics set to zero")
     
     return metrics
 
 
 def train_phase1(args):
     """Main training function for Phase 1."""
-    
-    # Initialize experiment tracker
-    # Check if exp_name already has a timestamp pattern (to avoid double-timestamping)
-    if args.exp_name.startswith("phase1_") and any(char.isdigit() for char in args.exp_name[-15:]):
-        # Already has phase1_ prefix and likely a timestamp, use as-is
-        exp_name = args.exp_name
-    else:
-        # Add prefix and timestamp
-        exp_name = f"phase1_{args.exp_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Create experiment name
+    exp_name = args.exp_name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
     tracker = ExperimentTracker(exp_name, args.log_dir)
     
-    # Log configuration
+    # Config
     config = vars(args)
     tracker.log_config(config)
-    tracker.log_message(f"Starting Phase 1 training: {exp_name}")
-    tracker.log_message(f"Configuration: {json.dumps(config, indent=2)}")
     
-    # Device setup
-    device = torch.device(args.device)
+    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     tracker.log_message(f"Using device: {device}")
     
-    # Load data
-    tracker.log_message("Loading datasets...")
-    files = sorted(glob.glob(os.path.join(args.json_dir, "**/*.json"), recursive=True))
+    # Load datasets
+    all_files = glob.glob(os.path.join(args.json_dir, "**/*.json"), recursive=True)
+    random.shuffle(all_files)
     
-    if len(files) == 0:
-        tracker.log_message(f"ERROR: No JSON files found in {args.json_dir}")
-        return
+    n_total = len(all_files)
+    n_val = int(n_total * args.val_fraction)
+    n_test = int(n_total * args.test_fraction)
+    n_train = n_total - n_val - n_test
     
-    tracker.log_message(f"Found {len(files)} JSON files")
+    train_files = all_files[:n_train]
+    val_files = all_files[n_train:n_train + n_val]
+    test_files = all_files[n_train + n_val:]
     
-    # Split data
-    np.random.seed(args.seed)
-    np.random.shuffle(files)
-    n = len(files)
-    n_test = max(1, int(n * args.test_fraction))
-    n_val = max(1, int(n * args.val_fraction))
+    train_dataset = StepPredictionDataset(train_files, args.spectral_dir, seed=args.seed)
+    val_dataset = StepPredictionDataset(val_files, args.spectral_dir, seed=args.seed)
+    test_dataset = StepPredictionDataset(test_files, args.spectral_dir, seed=args.seed)
     
-    train_files = files[: n - n_val - n_test]
-    val_files = files[n - n_val - n_test: n - n_test]
-    test_files = files[n - n_test:]
+    # New: Check for empty datasets
+    if len(train_dataset) == 0:
+        tracker.log_message("ERROR: No valid training samples found. Check data generation for proof_steps.")
+        # Save empty results for analysis to detect this
+        final_results = {
+            "exp_name": exp_name,
+            "config": config,
+            "best_val_metrics": {},
+            "test_metrics": {},
+            "total_epochs": 0,
+            "training_time": 0,
+            "error": "Empty training dataset"
+        }
+        results_file = os.path.join(tracker.exp_dir, "final_results.json")
+        with open(results_file, "w") as f:
+            json.dump(final_results, f, indent=2)
+        return None, None, tracker.exp_dir
     
-    tracker.log_message(f"Data split: {len(train_files)} train, {len(val_files)} val, {len(test_files)} test")
+    train_loader = GeometricDataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    val_loader = GeometricDataLoader(val_dataset, batch_size=args.batch_size)
+    test_loader = GeometricDataLoader(test_dataset, batch_size=args.batch_size)
     
-    # Create datasets
-    train_ds = StepPredictionDataset(train_files, spectral_dir=args.spectral_dir, seed=args.seed)
-    val_ds = StepPredictionDataset(val_files, spectral_dir=args.spectral_dir, seed=args.seed + 1)
-    test_ds = StepPredictionDataset(test_files, spectral_dir=args.spectral_dir, seed=args.seed + 2)
+    # Model
+    in_feats = train_dataset[0].x.shape[1]  # Node feature dim
+    model = GCNStepPredictor(in_feats, args.hidden_dim, args.num_layers, args.dropout).to(device)
     
-    tracker.log_message(f"Dataset sizes: {len(train_ds)} train samples, {len(val_ds)} val, {len(test_ds)} test")
-    
-    # Create dataloaders
-    train_loader = GeometricDataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-    val_loader = GeometricDataLoader(val_ds, batch_size=1, shuffle=False)
-    test_loader = GeometricDataLoader(test_ds, batch_size=1, shuffle=False)
-    
-    # Determine input features
-    sample0 = train_ds[0]
-    in_feats = sample0.x.size(1)
-    tracker.log_message(f"Input features dimension: {in_feats}")
-    
-    # Build model
-    model = GCNStepPredictor(
-        in_feats=in_feats,
-        hidden=args.hidden_dim,
-        num_layers=args.num_layers,
-        dropout=args.dropout
-    ).to(device)
-    
-    n_params = sum(p.numel() for p in model.parameters())
-    tracker.log_message(f"Model parameters: {n_params:,}")
-    
-    # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='max', factor=0.5, patience=5
-    )
-    
-    ce_loss = torch.nn.CrossEntropyLoss()
+    # Optimizer and scheduler
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
     
     # Training loop
-    best_val_hit1 = -1.0
+    best_val_hit1 = 0.0
     patience_counter = 0
     
-    tracker.log_message("\n" + "="*80)
-    tracker.log_message("Starting training...")
-    tracker.log_message("="*80 + "\n")
+    ce = torch.nn.CrossEntropyLoss()
     
     for epoch in range(1, args.epochs + 1):
         epoch_start = time.time()
-        
-        # Training
         model.train()
-        train_losses = []
         
-        for batch_idx, data in enumerate(train_loader):
+        train_loss = 0.0
+        train_samples = 0
+        
+        for data in train_loader:
             data = data.to(device)
-            
-            # Handle batched data
-            batch_size = data.num_graphs if hasattr(data, 'num_graphs') else 1
-            
             optimizer.zero_grad()
+            
+            batch_size = data.num_graphs if hasattr(data, 'num_graphs') else 1
             scores, _ = model(data.x, data.edge_index, data.batch if hasattr(data, 'batch') else None)
             
-            # For batched graphs, we need to handle each graph separately
-            if batch_size > 1:
-                # Get per-graph scores and targets
-                batch_losses = []
-                for i in range(batch_size):
-                    # Get nodes belonging to graph i
-                    mask = (data.batch == i)
-                    graph_scores = scores[mask]
-                    target_idx = int(data.y[i].item())
-                    
-                    if target_idx < 0 or target_idx >= len(graph_scores):
-                        continue
-                    
-                    logits = graph_scores.unsqueeze(0)
-                    targ = torch.tensor([target_idx], dtype=torch.long, device=device)
-                    batch_losses.append(ce_loss(logits, targ))
+            loss = 0.0
+            for i in range(batch_size):
+                mask = (data.batch == i) if batch_size > 1 else torch.ones_like(scores, dtype=torch.bool)
+                graph_scores = scores[mask]
+                target_idx = int(data.y[i].item()) if batch_size > 1 else int(data.y.item())
                 
-                if len(batch_losses) == 0:
+                if target_idx < 0 or target_idx >= len(graph_scores):
                     continue
-                    
-                loss = torch.stack(batch_losses).mean()
-            else:
-                # Single graph case
-                target_idx = int(data.y.view(-1).item())
-                if target_idx < 0:
-                    continue
-                    
-                logits = scores.unsqueeze(0)
+                
+                logits = graph_scores.unsqueeze(0)
                 targ = torch.tensor([target_idx], dtype=torch.long, device=device)
-                loss = ce_loss(logits, targ)
-            
+                loss += ce(logits, targ)
+                
+            loss /= max(1, batch_size)
             loss.backward()
-            
-            # Gradient clipping
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
-            
             optimizer.step()
-            train_losses.append(float(loss.item()))
             
-            # Progress logging
-            if batch_idx % 50 == 0:
-                tracker.log_message(
-                    f"Epoch {epoch}/{args.epochs} | Batch {batch_idx}/{len(train_loader)} | "
-                    f"Loss: {loss.item():.4f}"
-                )
+            train_loss += float(loss.item()) * batch_size
+            train_samples += batch_size
         
-        # Compute epoch metrics
-        train_loss = float(np.mean(train_losses)) if train_losses else 0.0
+        train_loss /= max(1, train_samples)
         
-        # Compute training metrics (for overfitting detection)
+        # Evaluate train and val
         train_metrics = compute_detailed_metrics(model, train_loader, device, "train")
-        
-        # Validation
         val_metrics = compute_detailed_metrics(model, val_loader, device, "val")
         
         # Calculate overfitting gap

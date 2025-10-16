@@ -112,6 +112,30 @@ def plot_training_curves(results: Dict, save_dir: str):
     plt.close()
 
 
+def plot_learning_rate_schedule(results: Dict, save_dir: str):
+    """Plot learning rate over epochs."""
+    history = results["metrics_history"]
+    if not history:
+        return
+    
+    epochs = [m["epoch"] for m in history]
+    lrs = [m.get("lr", 0) for m in history]
+    
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(epochs, lrs, marker='o', markersize=3, color='red')
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Learning Rate")
+    ax.set_title("Learning Rate Schedule")
+    ax.grid(True, alpha=0.3)
+    ax.set_yscale('log')
+    
+    plt.tight_layout()
+    save_path = os.path.join(save_dir, "lr_schedule.png")
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"Saved LR schedule to {save_path}")
+    plt.close()
+
+
 def create_results_table(results: Dict, save_dir: str):
     """Create formatted results table."""
     final = results.get("final_results")
@@ -160,146 +184,88 @@ def create_results_table(results: Dict, save_dir: str):
     df.to_csv(csv_path, index=False)
     print(f"Saved results table to {csv_path}")
     
-    # Print to console
-    print("\n" + "="*70)
-    print("PHASE 1 RESULTS SUMMARY")
-    print("="*70)
-    print(df.to_string(index=False))
-    print("="*70 + "\n")
-    
-    # Create formatted table plot
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.axis('tight')
-    ax.axis('off')
-    
-    table = ax.table(cellText=df.values, colLabels=df.columns,
-                     cellLoc='center', loc='center',
-                     colWidths=[0.3, 0.35, 0.35])
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2)
-    
-    # Style header
-    for i in range(len(df.columns)):
-        table[(0, i)].set_facecolor('#4CAF50')
-        table[(0, i)].set_text_props(weight='bold', color='white')
-    
-    # Style rows
-    for i in range(1, len(df) + 1):
-        for j in range(len(df.columns)):
-            if i % 2 == 0:
-                table[(i, j)].set_facecolor('#f0f0f0')
-    
-    plt.title("Phase 1: Baseline GCN Results", fontsize=14, weight='bold', pad=20)
-    
-    table_img_path = os.path.join(save_dir, "results_table.png")
-    plt.savefig(table_img_path, dpi=300, bbox_inches='tight')
-    print(f"Saved results table image to {table_img_path}")
-    plt.close()
-
-
-def plot_learning_rate_schedule(results: Dict, save_dir: str):
-    """Plot learning rate schedule over training."""
-    history = results["metrics_history"]
-    if not history or "lr" not in history[0]:
-        return
-    
-    epochs = [m["epoch"] for m in history]
-    lrs = [m.get("lr", 0) for m in history]
-    
-    plt.figure(figsize=(10, 5))
-    plt.plot(epochs, lrs, marker='o', markersize=4)
-    plt.xlabel("Epoch")
-    plt.ylabel("Learning Rate")
-    plt.title("Learning Rate Schedule")
-    plt.grid(True, alpha=0.3)
-    plt.yscale('log')
-    
-    save_path = os.path.join(save_dir, "lr_schedule.png")
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"Saved LR schedule to {save_path}")
-    plt.close()
+    # Save as Markdown
+    md_path = os.path.join(save_dir, "results_table.md")
+    with open(md_path, "w") as f:
+        f.write(df.to_markdown(index=False))
+    print(f"Saved markdown table to {md_path}")
 
 
 def generate_summary_report(results: Dict, save_dir: str):
-    """Generate text summary report."""
-    report_lines = []
-    
-    report_lines.append("=" * 80)
-    report_lines.append("PHASE 1: BASELINE EXPERIMENTAL REPORT")
-    report_lines.append("=" * 80)
-    report_lines.append("")
-    
-    # Configuration
+    """Generate comprehensive text summary report."""
     config = results.get("config", {})
-    report_lines.append("CONFIGURATION")
-    report_lines.append("-" * 80)
-    report_lines.append(f"  Model: GCN with {config.get('num_layers', 2)} layers")
-    report_lines.append(f"  Hidden dimension: {config.get('hidden_dim', 128)}")
-    report_lines.append(f"  Dropout: {config.get('dropout', 0.1)}")
-    report_lines.append(f"  Learning rate: {config.get('lr', 1e-3)}")
-    report_lines.append(f"  Batch size: {config.get('batch_size', 1)}")
-    report_lines.append(f"  Epochs trained: {config.get('epochs', 'N/A')}")
-    report_lines.append(f"  Device: {config.get('device', 'cpu')}")
-    report_lines.append(f"  Random seed: {config.get('seed', 42)}")
+    final = results.get("final_results", {})
+    
+    report_lines = []
+    report_lines.append("=" * 80)
+    report_lines.append("PHASE 1 EXPERIMENT SUMMARY")
+    report_lines.append("=" * 80)
     report_lines.append("")
     
-    # Training info
-    final = results.get("final_results", {})
-    if final:
-        report_lines.append("TRAINING SUMMARY")
-        report_lines.append("-" * 80)
-        report_lines.append(f"  Total epochs: {final.get('total_epochs', 'N/A')}")
-        report_lines.append(f"  Training time: {final.get('training_time', 0)/3600:.2f} hours")
+    # New: Handle missing final results
+    if final is None:
+        report_lines.append("WARNING: No final results found. Training may have failed or produced no samples.")
+        report_lines.append("Check train.log for details (e.g., empty dataset).")
         report_lines.append("")
-    
-    # Best validation results
-    best_val = final.get("best_val_metrics", {})
-    if best_val:
-        report_lines.append("BEST VALIDATION RESULTS")
+    else:
+        # Config summary
+        report_lines.append("EXPERIMENT CONFIGURATION")
         report_lines.append("-" * 80)
-        report_lines.append(f"  Loss: {best_val.get('val_loss', 0):.4f}")
-        report_lines.append(f"  Hit@1: {best_val.get('val_hit1', 0):.4f} ({best_val.get('val_hit1', 0)*100:.2f}%)")
-        report_lines.append(f"  Hit@3: {best_val.get('val_hit3', 0):.4f} ({best_val.get('val_hit3', 0)*100:.2f}%)")
-        report_lines.append(f"  Hit@10: {best_val.get('val_hit10', 0):.4f} ({best_val.get('val_hit10', 0)*100:.2f}%)")
-        report_lines.append(f"  MRR: {best_val.get('val_mrr', 0):.4f}")
+        report_lines.append(f"  Experiment Name: {final.get('exp_name', 'N/A')}")
+        report_lines.append(f"  Dataset: {config.get('json_dir', 'N/A')}")
+        report_lines.append(f"  Spectral Features: {config.get('spectral_dir', 'None')}")
+        report_lines.append(f"  Model: GCN with {config.get('num_layers', 2)} layers, hidden_dim={config.get('hidden_dim', 128)}")
+        report_lines.append(f"  Training: {config.get('epochs', 50)} epochs, lr={config.get('lr', 0.001)}, batch_size={config.get('batch_size', 1)}")
+        report_lines.append(f"  Total Training Time: {final.get('training_time', 0) / 3600:.2f} hours")
         report_lines.append("")
-    
-    # Test results
-    test_metrics = final.get("test_metrics", {})
-    if test_metrics:
-        report_lines.append("FINAL TEST RESULTS")
+        
+        # Best validation results
+        best_val = final.get("best_val_metrics", {})
+        if best_val:
+            report_lines.append("BEST VALIDATION RESULTS")
+            report_lines.append("-" * 80)
+            report_lines.append(f"  Loss: {best_val.get('val_loss', 0):.4f}")
+            report_lines.append(f"  Hit@1: {best_val.get('val_hit1', 0):.4f} ({best_val.get('val_hit1', 0)*100:.2f}%)")
+            report_lines.append(f"  Hit@3: {best_val.get('val_hit3', 0):.4f} ({best_val.get('val_hit3', 0)*100:.2f}%)")
+            report_lines.append(f"  Hit@10: {best_val.get('val_hit10', 0):.4f} ({best_val.get('val_hit10', 0)*100:.2f}%)")
+            report_lines.append(f"  MRR: {best_val.get('val_mrr', 0):.4f}")
+            report_lines.append("")
+        
+        # Test results
+        test_metrics = final.get("test_metrics", {})
+        if test_metrics:
+            report_lines.append("FINAL TEST RESULTS")
+            report_lines.append("-" * 80)
+            report_lines.append(f"  Loss: {test_metrics.get('test_loss', 0):.4f}")
+            report_lines.append(f"  Hit@1: {test_metrics.get('test_hit1', 0):.4f} ({test_metrics.get('test_hit1', 0)*100:.2f}%)")
+            report_lines.append(f"  Hit@3: {test_metrics.get('test_hit3', 0):.4f} ({test_metrics.get('test_hit3', 0)*100:.2f}%)")
+            report_lines.append(f"  Hit@10: {test_metrics.get('test_hit10', 0):.4f} ({test_metrics.get('test_hit10', 0)*100:.2f}%)")
+            report_lines.append(f"  MRR: {test_metrics.get('test_mrr', 0):.4f}")
+            report_lines.append(f"  Test samples: {test_metrics.get('test_samples', 0):.0f}")
+            report_lines.append("")
+        
+        # Key findings
+        report_lines.append("KEY FINDINGS")
         report_lines.append("-" * 80)
-        report_lines.append(f"  Loss: {test_metrics.get('test_loss', 0):.4f}")
-        report_lines.append(f"  Hit@1: {test_metrics.get('test_hit1', 0):.4f} ({test_metrics.get('test_hit1', 0)*100:.2f}%)")
-        report_lines.append(f"  Hit@3: {test_metrics.get('test_hit3', 0):.4f} ({test_metrics.get('test_hit3', 0)*100:.2f}%)")
-        report_lines.append(f"  Hit@10: {test_metrics.get('test_hit10', 0):.4f} ({test_metrics.get('test_hit10', 0)*100:.2f}%)")
-        report_lines.append(f"  MRR: {test_metrics.get('test_mrr', 0):.4f}")
-        report_lines.append(f"  Test samples: {test_metrics.get('test_samples', 0):.0f}")
-        report_lines.append("")
-    
-    # Key findings
-    report_lines.append("KEY FINDINGS")
-    report_lines.append("-" * 80)
-    
-    if test_metrics:
-        hit1 = test_metrics.get('test_hit1', 0)
-        hit10 = test_metrics.get('test_hit10', 0)
         
-        if hit1 >= 0.8:
-            report_lines.append("  ✅ EXCELLENT: Test Hit@1 >= 80% - Strong baseline performance")
-        elif hit1 >= 0.6:
-            report_lines.append("  ✓ GOOD: Test Hit@1 >= 60% - Solid baseline")
-        elif hit1 >= 0.4:
-            report_lines.append("  ⚠ FAIR: Test Hit@1 >= 40% - Room for improvement")
-        else:
-            report_lines.append("  ⚠ NEEDS WORK: Test Hit@1 < 40% - Requires tuning")
-        
-        report_lines.append(f"  • Top-1 accuracy: {hit1*100:.1f}%")
-        report_lines.append(f"  • Top-10 accuracy: {hit10*100:.1f}%")
-        
-        gap = hit10 - hit1
-        report_lines.append(f"  • Hit@10 - Hit@1 gap: {gap*100:.1f}% (larger gap = more room for ranking improvements)")
+        if test_metrics:
+            hit1 = test_metrics.get('test_hit1', 0)
+            hit10 = test_metrics.get('test_hit10', 0)
+            
+            if hit1 >= 0.8:
+                report_lines.append("  ✅ EXCELLENT: Test Hit@1 >= 80% - Strong baseline performance")
+            elif hit1 >= 0.6:
+                report_lines.append("  ✓ GOOD: Test Hit@1 >= 60% - Solid baseline")
+            elif hit1 >= 0.4:
+                report_lines.append("  ⚠ FAIR: Test Hit@1 >= 40% - Room for improvement")
+            else:
+                report_lines.append("  ⚠ NEEDS WORK: Test Hit@1 < 40% - Requires tuning")
+            
+            report_lines.append(f"  • Top-1 accuracy: {hit1*100:.1f}%")
+            report_lines.append(f"  • Top-10 accuracy: {hit10*100:.1f}%")
+            
+            gap = hit10 - hit1
+            report_lines.append(f"  • Hit@10 - Hit@1 gap: {gap*100:.1f}% (larger gap = more room for ranking improvements)")
     
     report_lines.append("")
     report_lines.append("NEXT STEPS FOR PHASE 2")
