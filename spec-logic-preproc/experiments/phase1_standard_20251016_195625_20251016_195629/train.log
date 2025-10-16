@@ -1,0 +1,195 @@
+[2025-10-16 19:56:29] Using device: cpu
+[2025-10-16 19:56:30] 
+Epoch 1/50 completed in 1.7s
+  Train Loss:    3.5037
+  Train Hit@1:   0.0992
+  Val Loss:      3.5523
+  Val Hit@1:     0.0723
+  Val Hit@3:     0.2048
+  Val Hit@10:    0.4819
+  Val MRR:       0.1960
+  Overfit Gap:   0.0269
+
+[2025-10-16 19:56:30] Saved best checkpoint (epoch 1)
+[2025-10-16 19:56:32] 
+Epoch 2/50 completed in 1.3s
+  Train Loss:    3.2031
+  Train Hit@1:   0.1280
+  Val Loss:      3.3763
+  Val Hit@1:     0.0241
+  Val Hit@3:     0.1084
+  Val Hit@10:    0.5181
+  Val MRR:       0.1525
+  Overfit Gap:   0.1039
+
+[2025-10-16 19:56:33] 
+Epoch 3/50 completed in 1.3s
+  Train Loss:    3.0627
+  Train Hit@1:   0.1280
+  Val Loss:      3.4505
+  Val Hit@1:     0.0602
+  Val Hit@3:     0.1084
+  Val Hit@10:    0.5060
+  Val MRR:       0.1749
+  Overfit Gap:   0.0678
+
+[2025-10-16 19:56:34] 
+Epoch 4/50 completed in 1.3s
+  Train Loss:    3.0134
+  Train Hit@1:   0.1088
+  Val Loss:      3.4499
+  Val Hit@1:     0.0482
+  Val Hit@3:     0.1566
+  Val Hit@10:    0.5060
+  Val MRR:       0.1779
+  Overfit Gap:   0.0606
+
+[2025-10-16 19:56:36] 
+Epoch 5/50 completed in 1.2s
+  Train Loss:    2.9416
+  Train Hit@1:   0.1520
+  Val Loss:      3.3812
+  Val Hit@1:     0.0361
+  Val Hit@3:     0.1566
+  Val Hit@10:    0.4819
+  Val MRR:       0.1649
+  Overfit Gap:   0.1159
+
+[2025-10-16 19:56:37] 
+Epoch 6/50 completed in 1.2s
+  Train Loss:    2.9116
+  Train Hit@1:   0.1584
+  Val Loss:      3.3548
+  Val Hit@1:     0.0361
+  Val Hit@3:     0.1687
+  Val Hit@10:    0.4699
+  Val MRR:       0.1755
+  Overfit Gap:   0.1223
+
+[2025-10-16 19:56:38] 
+Epoch 7/50 completed in 1.2s
+  Train Loss:    2.8596
+  Train Hit@1:   0.1568
+  Val Loss:      3.3538
+  Val Hit@1:     0.0602
+  Val Hit@3:     0.1205
+  Val Hit@10:    0.5301
+  Val MRR:       0.1722
+  Overfit Gap:   0.0966
+
+[2025-10-16 19:56:39] 
+Epoch 8/50 completed in 1.2s
+  Train Loss:    2.7476
+  Train Hit@1:   0.2016
+  Val Loss:      3.3941
+  Val Hit@1:     0.0361
+  Val Hit@3:     0.1446
+  Val Hit@10:    0.5181
+  Val MRR:       0.1628
+  Overfit Gap:   0.1655
+
+[2025-10-16 19:56:40] 
+Epoch 9/50 completed in 1.2s
+  Train Loss:    2.7063
+  Train Hit@1:   0.2000
+  Val Loss:      3.4772
+  Val Hit@1:     0.0361
+  Val Hit@3:     0.1084
+  Val Hit@10:    0.4940
+  Val MRR:       0.1503
+  Overfit Gap:   0.1639
+
+[2025-10-16 19:56:42] 
+Epoch 10/50 completed in 1.4s
+  Train Loss:    2.6821
+  Train Hit@1:   0.2144
+  Val Loss:      3.3870
+  Val Hit@1:     0.0482
+  Val Hit@3:     0.1687
+  Val Hit@10:    0.5181
+  Val MRR:       0.1714
+  Overfit Gap:   0.1662
+
+[2025-10-16 19:56:43] 
+Epoch 11/50 completed in 1.2s
+  Train Loss:    2.6788
+  Train Hit@1:   0.2112
+  Val Loss:      3.5051
+  Val Hit@1:     0.0482
+  Val Hit@3:     0.1084
+  Val Hit@10:    0.5783
+  Val MRR:       0.1665
+  Overfit Gap:   0.1630
+
+[2025-10-16 19:56:44] 
+Epoch 12/50 completed in 1.2s
+  Train Loss:    2.6414
+  Train Hit@1:   0.2144
+  Val Loss:      3.5335
+  Val Hit@1:     0.0602
+  Val Hit@3:     0.1205
+  Val Hit@10:    0.4699
+  Val MRR:       0.1742
+  Overfit Gap:   0.1542
+
+[2025-10-16 19:56:46] 
+Epoch 13/50 completed in 1.2s
+  Train Loss:    2.6342
+  Train Hit@1:   0.2256
+  Val Loss:      3.5273
+  Val Hit@1:     0.0241
+  Val Hit@3:     0.1325
+  Val Hit@10:    0.5542
+  Val MRR:       0.1554
+  Overfit Gap:   0.2015
+
+[2025-10-16 19:56:47] 
+Epoch 14/50 completed in 1.3s
+  Train Loss:    2.5469
+  Train Hit@1:   0.2416
+  Val Loss:      3.6256
+  Val Hit@1:     0.0361
+  Val Hit@3:     0.1205
+  Val Hit@10:    0.5060
+  Val MRR:       0.1615
+  Overfit Gap:   0.2055
+
+[2025-10-16 19:56:48] 
+Epoch 15/50 completed in 1.2s
+  Train Loss:    2.5302
+  Train Hit@1:   0.2352
+  Val Loss:      3.6537
+  Val Hit@1:     0.0120
+  Val Hit@3:     0.1325
+  Val Hit@10:    0.4699
+  Val MRR:       0.1481
+  Overfit Gap:   0.2232
+
+[2025-10-16 19:56:49] 
+Epoch 16/50 completed in 1.3s
+  Train Loss:    2.4757
+  Train Hit@1:   0.2544
+  Val Loss:      3.6975
+  Val Hit@1:     0.0361
+  Val Hit@3:     0.1325
+  Val Hit@10:    0.5181
+  Val MRR:       0.1605
+  Overfit Gap:   0.2183
+
+[2025-10-16 19:56:49] Early stopping triggered after 16 epochs
+[2025-10-16 19:56:49] 
+================================================================================
+[2025-10-16 19:56:49] Running final test evaluation...
+[2025-10-16 19:56:49] ================================================================================
+
+[2025-10-16 19:56:49] 
+FINAL TEST RESULTS:
+  Test Loss:   3.4722
+  Test Hit@1:  0.0857
+  Test Hit@3:  0.2095
+  Test Hit@10: 0.5238
+  Test MRR:    0.2165
+  Test Samples: 105
+
+[2025-10-16 19:56:49] 
+Training complete! Results saved to: experiments/phase1_standard_20251016_195625_20251016_195629

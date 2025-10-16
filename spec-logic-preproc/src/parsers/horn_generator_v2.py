@@ -47,7 +47,7 @@ def generate_stratified_horn_instance(
         Difficulty.EASY: {
             "n_facts": random.randint(4, 6),
             "n_rules": random.randint(4, 6),
-            "max_chain": random.randint(2, 3),
+            "max_chain": random.randint(3, 5),
             "body_size_range": (1, 1),
             "atoms_pool_size": 8,
             "negation_prob": 0.0,
@@ -56,28 +56,28 @@ def generate_stratified_horn_instance(
         Difficulty.MEDIUM: {
             "n_facts": random.randint(6, 10),
             "n_rules": random.randint(8, 12),
-            "max_chain": random.randint(3, 5),
-            "body_size_range": (1, 2),
+            "max_chain": random.randint(5, 8),
+            "body_size_range": (1, 3),  # Increased for complexity
             "atoms_pool_size": 15,
-            "negation_prob": 0.1,
+            "negation_prob": 0.2,  # Increased
             "disjunction_prob": 0.0,
         },
         Difficulty.HARD: {
             "n_facts": random.randint(10, 15),
             "n_rules": random.randint(12, 20),
-            "max_chain": random.randint(5, 8),
-            "body_size_range": (2, 3),
+            "max_chain": random.randint(8, 12),
+            "body_size_range": (3, 5),  # Increased
             "atoms_pool_size": 25,
-            "negation_prob": 0.2,
+            "negation_prob": 0.3,  # Increased
             "disjunction_prob": 0.1,
         },
         Difficulty.EXTREME: {
             "n_facts": random.randint(15, 25),
             "n_rules": random.randint(20, 35),
-            "max_chain": random.randint(8, 12),
-            "body_size_range": (2, 4),
+            "max_chain": random.randint(12, 16),
+            "body_size_range": (3, 6),  # Increased
             "atoms_pool_size": 40,
-            "negation_prob": 0.3,
+            "negation_prob": 0.4,  # Increased
             "disjunction_prob": 0.2,
         }
     }
@@ -107,23 +107,50 @@ def generate_stratified_horn_instance(
         nodes.append(n)
         fact_nids.append(n["nid"])
     
+    # FIXED VERSION - Around line 90
     # Create rules with varying complexity
     rule_nids = []
+
+    # FIRST: Ensure we have enough initial facts
+    initial_fact_atoms = []
+    for _ in range(p["n_facts"]):
+        atom = random.choice(atoms_pool)
+        is_negated = random.random() < p["negation_prob"]
+        label = f"~{atom}" if is_negated else atom
+        
+        n = {
+            "nid": _next_nid(nid_counter),
+            "type": "fact",
+            "label": label,
+            "atom": atom,
+            "negated": is_negated
+        }
+        nodes.append(n)
+        fact_nids.append(n["nid"])
+        initial_fact_atoms.append(atom)  # Track atoms we have
+
+    # NOW: Create rules that ONLY use atoms we have as facts
     for r in range(p["n_rules"]):
         body_size = random.randint(*p["body_size_range"])
-        body_atoms = random.choices(atoms_pool, k=body_size)
+        
+        # CRITICAL FIX: Only use atoms that exist as facts
+        if len(initial_fact_atoms) < body_size:
+            # Not enough facts, skip this rule
+            continue
+        
+        body_atoms = random.sample(initial_fact_atoms, k=body_size)
         head_atom = random.choice(atoms_pool)
         
         # Add negations to body
         body_negations = [random.random() < p["negation_prob"] for _ in body_atoms]
         body_labels = [f"~{a}" if neg else a for a, neg in zip(body_atoms, body_negations)]
         
-        # Add disjunction (A + B means A OR B in the body)
+        # Build rule label
         if random.random() < p["disjunction_prob"] and body_size > 1:
-            body_str = " | ".join(body_labels)  # disjunctive body
+            body_str = " | ".join(body_labels)
             rule_type = "disjunctive"
         else:
-            body_str = " & ".join(body_labels)  # conjunctive body
+            body_str = " & ".join(body_labels)
             rule_type = "conjunctive"
         
         label = f"({body_str}) -> {head_atom}"
@@ -142,27 +169,14 @@ def generate_stratified_horn_instance(
         }
         nodes.append(rule_node)
         
-        # Connect body atoms to rule
-        body_nids = []
+        # Connect body atoms to rule (atoms are GUARANTEED to exist now)
         for atom, is_neg in zip(body_atoms, body_negations):
             label_str = f"~{atom}" if is_neg else atom
-            # Find or create fact node for body atom if not exists
-            found = next((n for n in nodes if n["type"] == "fact" and n["label"] == label_str), None)
-            if not found:
-                body_nid = _next_nid(nid_counter)
-                nodes.append({
-                    "nid": body_nid,
-                    "type": "fact",
-                    "label": label_str,
-                    "atom": atom,
-                    "negated": is_neg
-                })
-            else:
-                body_nid = found["nid"]
-            body_nids.append(body_nid)
-            edges.append({"src": body_nid, "dst": rule_nid, "etype": "body"})
+            # Find the fact node (MUST exist)
+            fact_node = next(n for n in nodes if n["type"] == "fact" and n["label"] == label_str)
+            edges.append({"src": fact_node["nid"], "dst": rule_nid, "etype": "body"})
         
-        # Connect rule to head fact (create if not exists)
+        # Connect rule to head fact
         head_label = head_atom
         head_found = next((n for n in nodes if n["type"] == "fact" and n["label"] == head_label), None)
         if not head_found:
@@ -176,8 +190,14 @@ def generate_stratified_horn_instance(
             })
         else:
             head_nid = head_found["nid"]
+        
         edges.append({"src": rule_nid, "dst": head_nid, "etype": "head"})
+        
+        # Add head atom to available atoms for future rules
+        if head_atom not in initial_fact_atoms:
+            initial_fact_atoms.append(head_atom)
     
+
     # Forward-chaining proof generation
     derived = set(fact_nids)
     rule_applied = True
@@ -249,6 +269,12 @@ def generate_stratified_horn_instance(
         }
     }
     
+# VALIDATE: All rule bodies have corresponding fact nodes
+    for rule in [n for n in nodes if n["type"] == "rule"]:
+        body_edges = [e for e in edges if e["dst"] == rule["nid"] and e["etype"] == "body"]
+        if len(body_edges) != len(rule["body_atoms"]):
+            print(f"WARNING: Rule {rule['nid']} missing body connections!")
+
     return instance
 
 

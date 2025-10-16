@@ -101,23 +101,25 @@ class StepPredictionDataset(Dataset):
         self.spectral_dir = spectral_dir
         random.seed(seed)
 
+        valid_samples = 0
+        skipped_no_proofs = 0
+
         for f in self.files:
-            try:
-                inst = json.load(open(f, "r"))
-            except Exception as e:
-                print(f"Warning: Could not load JSON file {f}: {e}")
-                continue
-            # basic validation
-            if "nodes" not in inst or "edges" not in inst:
-                continue
+            inst = json.load(open(f, "r"))
             proof_steps = inst.get("proof_steps", [])
-            # Only use instances that have at least one proof step
+            
             if not proof_steps:
+                skipped_no_proofs += 1
                 continue
-            # append (inst, step_idx) for every proof step
+            
             for si in range(len(proof_steps)):
                 self.samples.append((inst, si))
+                valid_samples += 1
 
+        print(f"Dataset: {valid_samples} samples from {len(self.files)} files")
+        print(f"Skipped {skipped_no_proofs} files with no proof steps")
+        
+        
     def __len__(self):
         return len(self.samples)
 
@@ -169,19 +171,34 @@ class StepPredictionDataset(Dataset):
         id2idx = self._node_order_map(nodes)
         
         # Node features: one-hot type (fact=0, rule=1) + derived flag (0/1)
+        # [type_onehot(2), derived(1), is_initial_fact(1), atom_hash(8)]
         n_nodes = len(nodes)
-        x = torch.zeros((n_nodes, 2), dtype=torch.float)  # [type_onehot(1), derived(1)]
+        x = torch.zeros((n_nodes, 12), dtype=torch.float) 
         
         # Derived facts up to this step
-        derived_up_to_step = set(int(s["derived_node"]) for s in proof_steps[:step_idx+1])
+        derived_up_to_step = set(int(s["derived_node"]) for s in proof_steps[:step_idx])
         initial_facts = self._compute_initial_facts(inst)
         
         for node in nodes:
             idx = id2idx[int(node["nid"])]
-            ntype = 0 if node["type"] == "fact" else 1
-            derived = 1 if int(node["nid"]) in derived_up_to_step else 0
-            x[idx] = torch.tensor([ntype, derived])
-        
+            
+            # Type one-hot
+            if node["type"] == "fact":
+                x[idx, 0] = 1
+            else:
+                x[idx, 1] = 1
+            
+            # Derived flag
+            x[idx, 2] = 1 if int(node["nid"]) in derived_up_to_step else 0
+            
+            # Initial fact flag
+            x[idx, 3] = 1 if int(node["nid"]) in initial_facts else 0
+            
+            # Atom hash (simple encoding)
+            atom = node.get("label", "")
+            atom_id = hash(atom) % 256
+            x[idx, 4:12] = torch.tensor([int(b) for b in format(atom_id, '08b')], dtype=torch.float)
+                
         # Optional: append spectral features
         spectral_feats = self._load_spectral(inst.get("id", ""))
         if spectral_feats is not None:
@@ -215,7 +232,7 @@ def train(
     exp_dir: Optional[str] = None,
     epochs: int = 20,
     lr: float = 1e-3,
-    batch_size: int = 1,
+    batch_size: int = 16,
     hidden: int = 128,
     num_layers: int = 2,
     dropout: float = 0.1,
