@@ -51,7 +51,7 @@ class GCNStepPredictor(torch.nn.Module):
             h = conv(h, edge_index)
             h = self.layer_norms[i](h)  # Apply layer normalization
             if i != len(self.convs) - 1:
-                h = F.relu(h)
+                h = F.gelu(h)  # Changed to GELU for smoother gradients
                 h = F.dropout(h, p=self.dropout, training=self.training)
         # scoring
         scores = self.score_head(h).squeeze(-1)  # shape (N,)

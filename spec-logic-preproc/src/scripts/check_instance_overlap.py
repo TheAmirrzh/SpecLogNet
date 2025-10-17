@@ -1,4 +1,3 @@
-# scripts/check_instance_overlap.py
 import argparse, torch, hashlib
 from collections import Counter, defaultdict
 from pathlib import Path

@@ -1,0 +1,19 @@
+{
+  "json_dir": "data_processed/phase1_standard_20251017_133618",
+  "spectral_dir": "data_processed/phase1_standard_20251017_133618/spectral",
+  "val_fraction": 0.1,
+  "test_fraction": 0.1,
+  "hidden_dim": 128,
+  "num_layers": 3,
+  "dropout": 0.1,
+  "epochs": 50,
+  "batch_size": 32,
+  "lr": 0.005,
+  "weight_decay": 1e-05,
+  "grad_clip": 1.0,
+  "patience": 15,
+  "exp_name": "phase1_standard_20251017_133618",
+  "log_dir": "experiments",
+  "device": "cpu",
+  "seed": 42
+}

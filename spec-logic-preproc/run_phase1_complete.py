@@ -111,18 +111,12 @@ class Phase1Runner:
         return self.run_command(cmd, "Data Generation")
     
     def step2_train_baseline(self):
-        """Step 2: Train baseline GCN model."""
+        """Step 2: Train baseline GCN model with FIXED hyperparameters."""
         
-        # Manually ensure the target experiment directory exists
         os.makedirs(self.exp_dir, exist_ok=True)
         
-        # We need to extract the experiment name (the last part) and the log directory (the parent)
-        exp_name = self.exp_dir.name  # e.g., phase1_quick_20251015_134237
-        # The parent is 'experiments' relative to the base_dir (.)
-        log_dir = self.exp_dir.parent 
-        
-        # DIAGNOSTIC CHECKPOINT
-        print(f"*** CHECKPOINT 1: Training directory created at absolute path: {self.exp_dir.resolve()}")
+        exp_name = self.exp_dir.name
+        log_dir = self.exp_dir.parent
         
         cmd = [
             sys.executable, "-m", "src.train_phase1",
@@ -130,15 +124,15 @@ class Phase1Runner:
             "--spectral-dir", str(self.data_dir / "spectral"),
             "--exp-name", exp_name,
             "--log-dir", str(log_dir),
-            "--hidden-dim", "128",
-            "--num-layers", "3",
-            "--dropout", "0.2",
+            "--hidden-dim", "256",      # Increased from 128
+            "--num-layers", "4",         # Increased from 3
+            "--dropout", "0.3",          # Increased from 0.2
             "--epochs", str(self.config["epochs"]),
-            "--batch-size", "16",
-            "--lr", "0.01",
-            "--weight-decay", "1e-3",
+            "--batch-size", "32",        # Increased from 16
+            "--lr", "0.0005",            # Decreased from 0.01 (CRITICAL!)
+            "--weight-decay", "1e-4",    # Increased from 1e-3
             "--grad-clip", "2.0",
-            "--patience", "15",
+            "--patience", "20",          # Increased from 15
             "--device", self.device,
             "--seed", str(self.seed)
         ]
@@ -310,3 +304,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+

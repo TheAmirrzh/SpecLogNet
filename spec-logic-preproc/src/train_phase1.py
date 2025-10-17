@@ -17,10 +17,12 @@ from datetime import datetime
 from typing import Dict, List
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch_geometric.loader import DataLoader as GeometricDataLoader
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from src.train_step_predictor import StepPredictionDataset, evaluate_model, hit_at_k
+from src.train_step_predictor_fixed import StepPredictionDataset, evaluate_model, hit_at_k
 from src.models.gcn_step_predictor import GCNStepPredictor
 
 
@@ -175,9 +177,6 @@ def compute_detailed_metrics(model, dataloader, device, dataset_name="val"):
         for key in metrics:
             if key != f"{dataset_name}_samples":
                 metrics[key] /= metrics[f"{dataset_name}_samples"]
-    else:
-        # New: Handle empty dataset
-        print(f"Warning: No samples in {dataset_name} dataset - metrics set to zero")
     
     return metrics
 
@@ -212,25 +211,6 @@ def train_phase1(args):
     val_dataset = StepPredictionDataset(val_files, args.spectral_dir, seed=args.seed)
     test_dataset = StepPredictionDataset(test_files, args.spectral_dir, seed=args.seed)
     
-
-    # New: Check for empty datasets
-    if len(train_dataset) == 0:
-        tracker.log_message("ERROR: No valid training samples found. Check data generation for proof_steps.")
-        # Save empty results for analysis to detect this
-        final_results = {
-            "exp_name": exp_name,
-            "config": config,
-            "best_val_metrics": {},
-            "test_metrics": {},
-            "total_epochs": 0,
-            "training_time": 0,
-            "error": "Empty training dataset"
-        }
-        results_file = os.path.join(tracker.exp_dir, "final_results.json")
-        with open(results_file, "w") as f:
-            json.dump(final_results, f, indent=2)
-        return None, None, tracker.exp_dir
-    
     train_loader = GeometricDataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = GeometricDataLoader(val_dataset, batch_size=args.batch_size)
     test_loader = GeometricDataLoader(test_dataset, batch_size=args.batch_size)
@@ -241,15 +221,26 @@ def train_phase1(args):
     
     # Optimizer and scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0)  # New scheduler
+    
+    # Loss components
+    ce = torch.nn.CrossEntropyLoss()
+    
+    # Warmup (linear ramp over first 5 epochs)
+    warmup_epochs = 5
+    base_lr = args.lr
     
     # Training loop
     best_val_hit1 = 0.0
     patience_counter = 0
     
-    ce = torch.nn.CrossEntropyLoss()
-    
     for epoch in range(1, args.epochs + 1):
+        # Warmup LR
+        if epoch <= warmup_epochs:
+            lr = base_lr * (epoch / warmup_epochs)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
+        
         epoch_start = time.time()
         model.train()
         
@@ -261,12 +252,14 @@ def train_phase1(args):
             optimizer.zero_grad()
             
             batch_size = data.num_graphs if hasattr(data, 'num_graphs') else 1
-            scores, _ = model(data.x, data.edge_index, data.batch if hasattr(data, 'batch') else None)
+            scores, h = model(data.x, data.edge_index, data.batch if hasattr(data, 'batch') else None)
             
-            loss = 0.0
+            loss_ce = 0.0
+            loss_contrast = 0.0
             for i in range(batch_size):
                 mask = (data.batch == i) if batch_size > 1 else torch.ones_like(scores, dtype=torch.bool)
                 graph_scores = scores[mask]
+                graph_h = h[mask]
                 target_idx = int(data.y[i].item()) if batch_size > 1 else int(data.y.item())
                 
                 if target_idx < 0 or target_idx >= len(graph_scores):
@@ -274,9 +267,18 @@ def train_phase1(args):
                 
                 logits = graph_scores.unsqueeze(0)
                 targ = torch.tensor([target_idx], dtype=torch.long, device=device)
-                loss += ce(logits, targ)
+                loss_ce += ce(logits, targ)
                 
-            loss /= max(1, batch_size)
+                # Contrastive: Positive = correct vs mean; Negatives = others vs mean
+                graph_mean = graph_h.mean(dim=0, keepdim=True)
+                pos = graph_h[target_idx].unsqueeze(0)
+                neg = graph_h[torch.arange(len(graph_h)) != target_idx]
+                
+                pos_sim = torch.exp(F.cosine_similarity(pos, graph_mean) / 0.07)
+                neg_sim = torch.exp(F.cosine_similarity(neg, graph_mean.repeat(len(neg), 1)) / 0.07).sum()
+                loss_contrast += -torch.log(pos_sim / (pos_sim + neg_sim + 1e-8))
+            
+            loss = (loss_ce + loss_contrast) / max(1, batch_size)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
             optimizer.step()
@@ -294,7 +296,7 @@ def train_phase1(args):
         overfit_gap = train_metrics["train_hit1"] - val_metrics["val_hit1"]
         
         # Learning rate scheduling
-        scheduler.step(val_metrics["val_hit1"])
+        scheduler.step()
         
         # Log epoch results
         epoch_time = time.time() - epoch_start

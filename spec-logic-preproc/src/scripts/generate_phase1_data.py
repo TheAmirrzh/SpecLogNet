@@ -17,7 +17,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.parsers.horn_generator_v2 import generate_stratified_horn_instance, Difficulty
+from src.parsers.horn_generator_fixed import generate_stratified_horn_instance, Difficulty
 from src.spectral import adjacency_from_edges, compute_symmetric_laplacian, topk_eig
 
 
