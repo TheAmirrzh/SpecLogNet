@@ -1,360 +1,220 @@
-"""
-Diagnostic Script - Automatically detect common issues
-"""
-
-import json
 import torch
-from pathlib import Path
-from torch_geometric.loader import DataLoader
+import torch.nn.functional as F
+import numpy as np
+import logging
+from typing import Dict, List
+from collections import defaultdict
 
-from dataset import StepPredictionDataset, create_split
-from model import StepPredictorGNN
-from losses import HybridRankingLoss
+# --- Mock Imports ---
+# These are placeholders for your actual file imports
+# In a real run, you would import from dataset.py
+try:
+    from dataset import ProofStepDataset, create_split
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
+    logger.info("Successfully imported ProofStepDataset.")
+except ImportError:
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO)
+    logger.error("Could not import ProofStepDataset. Using mock data.")
+    
+    # Create mock classes if import fails
+    class MockData:
+        def __init__(self, x, y, applicable_mask):
+            self.x = x
+            self.y = y
+            self.applicable_mask = applicable_mask
+        def __getitem__(self, key):
+             # Mock for x[target_idx]
+            if key == 'y': return self.y
+            if key == 'applicable_mask': return self.applicable_mask
+            return self.x
+            
+    class ProofStepDataset:
+        def __init__(self, *args, **kwargs):
+            self.mock_db = self._generate_mock_data()
+        
+        def _generate_mock_data(self):
+            db = []
+            # 1. Easy case: features are very different
+            db.append(MockData(
+                x=torch.tensor([
+                    [1.0, 0.0, 0.0], # Target
+                    [0.0, 1.0, 0.0], # App
+                    [0.0, 0.0, 1.0], # Inapp
+                ]),
+                y=torch.tensor([0]),
+                applicable_mask=torch.tensor([True, True, False])
+            ))
+            # 2. Hard case: applicable features are similar
+            db.append(MockData(
+                x=torch.tensor([
+                    [0.9, 0.1, 0.5], # Target
+                    [0.8, 0.2, 0.6], # App (similar)
+                    [0.0, 0.0, 1.0], # Inapp
+                ]),
+                y=torch.tensor([0]),
+                applicable_mask=torch.tensor([True, True, False])
+            ))
+            return db
+
+        def __len__(self):
+            return len(self.mock_db)
+
+        def __getitem__(self, idx):
+            return self.mock_db[idx]
+
+    def create_split(*args, **kwargs):
+        return [], [], [] # Return empty lists
+# --- End Mock Imports ---
 
 
-def check_data_quality(data_dir: str):
-    """Check dataset for common issues."""
-    print("\n" + "="*70)
-    print("DATASET DIAGNOSTICS")
-    print("="*70)
+class FeatureDiagnostic:
+    """
+    Tests the quality of node features in a ProofStepDataset.
     
-    issues = []
-    
-    # Check if data exists
-    data_path = Path(data_dir)
-    if not data_path.exists():
-        issues.append("❌ Data directory not found")
-        return issues
-    
-    # Load sample files
-    json_files = list(data_path.rglob("*.json"))
-    print(f"✓ Found {len(json_files)} JSON files")
-    
-    if len(json_files) == 0:
-        issues.append("❌ No JSON files found - run data_generator.py first")
-        return issues
-    
-    # Check file content
-    sample_file = json_files[0]
-    with open(sample_file) as f:
-        inst = json.load(f)
-    
-    # Check structure
-    required_keys = ["id", "nodes", "edges", "proof_steps", "metadata"]
-    for key in required_keys:
-        if key not in inst:
-            issues.append(f"❌ Missing key '{key}' in JSON")
-    
-    # Check proof steps
-    n_proofs = len(inst.get("proof_steps", []))
-    if n_proofs == 0:
-        issues.append(f"⚠️  File {sample_file.name} has no proof steps")
-    else:
-        print(f"✓ Sample file has {n_proofs} proof steps")
-    
-    # Check for duplicates
-    instance_ids = []
-    for f in json_files[:100]:  # Sample
-        with open(f) as fp:
-            instance_ids.append(json.load(fp).get("id", ""))
-    
-    if len(instance_ids) != len(set(instance_ids)):
-        issues.append("⚠️  Duplicate instance IDs detected")
-    else:
-        print(f"✓ No duplicate instance IDs (checked 100 files)")
-    
-    return issues
+    The key question: Are the features good enough to distinguish
+    the *correct* applicable rule from *other* applicable rules?
+    """
+
+    def __init__(self, dataset: ProofStepDataset):
+        self.dataset = dataset
+        if not hasattr(self, 'dataset') or len(self.dataset) == 0:
+             logger.warning("Dataset is empty or failed to load. Using mock data.")
+             self.dataset = ProofStepDataset() # Fallback to mock
+
+        self.results = defaultdict(list)
+
+    def run_diagnostics(self, num_samples=100):
+        logger.info(f"Running feature diagnostics on {min(num_samples, len(self.dataset))} samples...")
+        
+        for i in range(min(num_samples, len(self.dataset))):
+            try:
+                data = self.dataset[i]
+                if data is None:
+                    continue
+
+                target_idx = data.y.item()
+                applicable_mask = data.applicable_mask
+                x = data.x
+
+                if not applicable_mask[target_idx]:
+                    # This is a data-loading error, skip
+                    continue
+                
+                applicable_indices = applicable_mask.nonzero(as_tuple=True)[0]
+                
+                # 1. Calculate the 'applicable_random' baseline
+                num_applicable = len(applicable_indices)
+                if num_applicable > 0:
+                    self.results['baseline_applicable_random'].append(1.0 / num_applicable)
+
+                # 2. Test feature uniqueness
+                if num_applicable > 1:
+                    self._test_feature_similarity(x, target_idx, applicable_indices)
+
+            except Exception as e:
+                logger.error(f"Failed on sample {i}: {e}")
+                continue
+        
+        self.print_report()
+
+    def _test_feature_similarity(self, x: torch.Tensor, target_idx: int, applicable_indices: torch.Tensor):
+        """
+        Checks if the target's features are distinct from other *applicable* rules.
+        """
+        target_features = x[target_idx].unsqueeze(0) # [1, D]
+        
+        # Get other applicable indices
+        other_applicable_mask = (applicable_indices != target_idx)
+        other_indices = applicable_indices[other_applicable_mask]
+
+        if len(other_indices) == 0:
+            # Target was the only applicable rule
+            self.results['target_was_unique'].append(1.0)
+            return
+
+        other_features = x[other_indices] # [K, D]
+        
+        # Cosine similarity between target and all other applicable rules
+        similarities = F.cosine_similarity(target_features, other_features) # [K]
+        
+        # Find the most similar competitor
+        max_similarity = similarities.max().item()
+        self.results['max_similarity_to_competitor'].append(max_similarity)
+        
+        # Did a competitor have *identical* features?
+        if max_similarity > 0.999:
+            self.results['feature_collisions'].append(1.0)
 
 
-def check_dataset_class(data_dir: str):
-    """Check dataset loading."""
-    print("\n" + "="*70)
-    print("DATASET CLASS DIAGNOSTICS")
-    print("="*70)
-    
-    issues = []
-    
+    def print_report(self):
+        logger.info("\n" + "="*80)
+        logger.info("🔬 FEATURE DIAGNOSTIC REPORT")
+        logger.info("="*80)
+
+        if not self.results:
+            logger.error("No valid samples were processed. Cannot generate report.")
+            return
+
+        # --- Baseline Report ---
+        baseline_acc = np.mean(self.results['baseline_applicable_random']) * 100
+        logger.info(f"📊 Baseline 'Applicable Random' Accuracy: {baseline_acc:.2f}%")
+        logger.info(f"   (This is the score to beat. It means on average there are ~{1/ (baseline_acc / 100):.2f} applicable rules to choose from.)")
+
+        # --- Feature Quality Report ---
+        if 'max_similarity_to_competitor' in self.results:
+            avg_max_sim = np.mean(self.results['max_similarity_to_competitor'])
+            collisions = np.sum(self.results.get('feature_collisions', [0]))
+            total_comparisons = len(self.results['max_similarity_to_competitor'])
+
+            logger.info(f"\n📊 Feature Expressiveness (Cosine Similarity):")
+            logger.info(f"   Avg. Max Similarity to Competitor: {avg_max_sim:.4f}")
+            logger.info(f"   Feature Collisions (Similarity > 0.999): {collisions} / {total_comparisons} ({collisions/total_comparisons:.1%})")
+
+            logger.info("\n--- ANALYSIS ---")
+            if avg_max_sim > 0.9:
+                logger.warning("🔥 WARNING: Features are NOT expressive.")
+                logger.warning("  The target rule's features are, on average, >90% similar to its closest competitor.")
+            elif avg_max_sim > 0.7:
+                 logger.warning("  CAUTION: Features are only moderately expressive.")
+            else:
+                 logger.info("  ✅ INFO: Features appear to be highly expressive (avg. similarity < 0.7).")
+
+            if collisions / total_comparisons > 0.05:
+                 logger.error("  ❌ CRITICAL: More than 5% of samples have feature collisions.")
+                 logger.error("     This proves your features are not SOTA and cannot distinguish the target.")
+            
+            logger.info("\nRECOMMENDATION: See 'sota_dataset_design.md' to engineer new features.")
+        
+        logger.info("="*80)
+
+def main():
+    # --- This will use your REAL dataset ---
     try:
-        train_files, val_files, _ = create_split(data_dir, seed=42)
+        from dataset import create_split, ProofStepDataset
         
-        # Check split sizes
-        if len(train_files) < 10:
-            issues.append(f"❌ Too few training files: {len(train_files)}")
-        else:
-            print(f"✓ Train files: {len(train_files)}")
-        
-        # Load dataset
-        dataset = StepPredictionDataset(train_files[:5], spectral_dir=None)
-        
-        if len(dataset) == 0:
-            issues.append("❌ Dataset is empty - check proof_steps in JSON")
-            return issues
-        
-        print(f"✓ Dataset loaded: {len(dataset)} samples from 5 files")
-        
-        # Check sample structure
-        sample = dataset[0]
-        
-        print(f"✓ Sample shape: x={sample.x.shape}, edges={sample.edge_index.shape}")
-        
-        # Check feature dimension
-        feature_dim = sample.x.shape[1]
-        if feature_dim < 10:
-            issues.append(f"⚠️  Feature dim too small: {feature_dim} (expected 20+)")
-        else:
-            print(f"✓ Feature dimension: {feature_dim}")
-        
-        # Check target validity
-        target = sample.y.item()
-        n_nodes = sample.x.shape[0]
-        
-        if target < 0 or target >= n_nodes:
-            issues.append(f"❌ Invalid target: {target} (n_nodes={n_nodes})")
-        else:
-            print(f"✓ Valid target: {target} < {n_nodes}")
-        
-    except Exception as e:
-        issues.append(f"❌ Dataset loading failed: {e}")
-    
-    return issues
-
-
-def check_dataloader(data_dir: str, batch_size: int = 64):
-    """Check dataloader configuration."""
-    print("\n" + "="*70)
-    print("DATALOADER DIAGNOSTICS")
-    print("="*70)
-    
-    issues = []
-    
-    try:
-        train_files, _, _ = create_split(data_dir, seed=42)
-        dataset = StepPredictionDataset(train_files[:10], spectral_dir=None)
-        
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-        
-        # Check batch size
-        if batch_size == 1:
-            issues.append("❌ CRITICAL: Batch size = 1 (should be 32-128)")
-        elif batch_size < 16:
-            issues.append(f"⚠️  Batch size too small: {batch_size} (recommend 64)")
-        else:
-            print(f"✓ Batch size: {batch_size}")
-        
-        # Check batch
-        batch = next(iter(loader))
-        
-        print(f"✓ Batch loaded: {batch.num_graphs} graphs, {batch.x.shape[0]} nodes")
-        
-        # Check batch vector
-        if hasattr(batch, 'batch'):
-            print(f"✓ Batch vector present: {batch.batch.shape}")
-        else:
-            issues.append("⚠️  No batch vector (needed for batched training)")
-        
-    except Exception as e:
-        issues.append(f"❌ DataLoader failed: {e}")
-    
-    return issues
-
-
-def check_model(data_dir: str):
-    """Check model architecture."""
-    print("\n" + "="*70)
-    print("MODEL DIAGNOSTICS")
-    print("="*70)
-    
-    issues = []
-    
-    try:
-        train_files, _, _ = create_split(data_dir, seed=42)
-        dataset = StepPredictionDataset(train_files[:5], spectral_dir=None)
-        
-        sample = dataset[0]
-        in_dim = sample.x.shape[1]
-        
-        model = StepPredictorGNN(
-            in_dim=in_dim,
-            hidden_dim=256,
-            num_layers=4
+        # 1. Load your data files
+        train_files, _, _ = create_split(
+            data_dir='generated_data', 
+            train_ratio=0.7, 
+            val_ratio=0.15, 
+            seed=42
         )
         
-        n_params = sum(p.numel() for p in model.parameters())
-        print(f"✓ Model created: {n_params:,} parameters")
-        
-        # Test forward pass
-        scores, embeddings = model(sample.x, sample.edge_index)
-        
-        print(f"✓ Forward pass: scores={scores.shape}, embeddings={embeddings.shape}")
-        
-        # Check output
-        if scores.shape[0] != sample.x.shape[0]:
-            issues.append(f"❌ Score shape mismatch: {scores.shape} vs {sample.x.shape}")
-        
-        if torch.isnan(scores).any():
-            issues.append("❌ NaN in model output")
-        
-        if torch.isinf(scores).any():
-            issues.append("❌ Inf in model output")
-        
+        # 2. Initialize your real dataset
+        dataset = ProofStepDataset(
+            json_files=train_files,
+            spectral_dir='spectral_cache', # Not actually used, but good to pass
+            seed=42
+        )
     except Exception as e:
-        issues.append(f"❌ Model test failed: {e}")
-    
-    return issues
+        logger.critical(f"Failed to load real dataset: {e}. Falling back to mock data.")
+        dataset = ProofStepDataset(json_files=[]) # Init mock data
 
-
-def check_loss_function(data_dir: str):
-    """Check loss computation."""
-    print("\n" + "="*70)
-    print("LOSS FUNCTION DIAGNOSTICS")
-    print("="*70)
-    
-    issues = []
-    
-    try:
-        train_files, _, _ = create_split(data_dir, seed=42)
-        dataset = StepPredictionDataset(train_files[:5], spectral_dir=None)
-        
-        sample = dataset[0]
-        in_dim = sample.x.shape[1]
-        
-        model = StepPredictorGNN(in_dim=in_dim, hidden_dim=256, num_layers=4)
-        criterion = HybridRankingLoss()
-        
-        # Forward pass
-        scores, embeddings = model(sample.x, sample.edge_index)
-        target_idx = sample.y.item()
-        
-        # Compute loss
-        loss, margin_l, contrast_l = criterion(scores, embeddings, target_idx)
-        
-        print(f"✓ Loss computed: total={loss.item():.4f}, margin={margin_l.item():.4f}, contrastive={contrast_l.item():.4f}")
-        
-        # Check loss validity
-        if torch.isnan(loss):
-            issues.append("❌ NaN loss")
-        
-        if loss.item() < 0:
-            issues.append(f"❌ Negative loss: {loss.item()}")
-        
-        if loss.item() > 100:
-            issues.append(f"⚠️  Very large loss: {loss.item()} (might be OK initially)")
-        
-        # Test backward pass
-        loss.backward()
-        
-        print("✓ Backward pass successful")
-        
-    except Exception as e:
-        issues.append(f"❌ Loss computation failed: {e}")
-    
-    return issues
-
-
-def check_training_config(config_path: str = None):
-    """Check training configuration."""
-    print("\n" + "="*70)
-    print("TRAINING CONFIG DIAGNOSTICS")
-    print("="*70)
-    
-    issues = []
-    recommendations = []
-    
-    # Default config
-    config = {
-        "batch_size": 64,
-        "lr": 3e-4,
-        "epochs": 100,
-        "hidden_dim": 256,
-        "num_layers": 4,
-        "dropout": 0.3
-    }
-    
-    # Load from file if provided
-    if config_path and Path(config_path).exists():
-        with open(config_path) as f:
-            config = json.load(f)
-    
-    # Check batch size
-    if config["batch_size"] == 1:
-        issues.append("❌ CRITICAL: batch_size=1 (change to 64)")
-    elif config["batch_size"] < 32:
-        recommendations.append(f"⚠️  batch_size={config['batch_size']} is small (try 64)")
-    else:
-        print(f"✓ batch_size: {config['batch_size']}")
-    
-    # Check learning rate
-    if config["lr"] > 1e-3:
-        recommendations.append(f"⚠️  lr={config['lr']} is high (try 3e-4)")
-    else:
-        print(f"✓ lr: {config['lr']}")
-    
-    # Check model capacity
-    if config["hidden_dim"] < 128:
-        recommendations.append(f"⚠️  hidden_dim={config['hidden_dim']} is small (try 256)")
-    else:
-        print(f"✓ hidden_dim: {config['hidden_dim']}")
-    
-    if config["num_layers"] < 3:
-        recommendations.append(f"⚠️  num_layers={config['num_layers']} is shallow (try 4)")
-    else:
-        print(f"✓ num_layers: {config['num_layers']}")
-    
-    return issues, recommendations
-
-
-def run_diagnostics(data_dir: str = "data/horn", config_path: str = None):
-    """Run all diagnostics."""
-    print("\n" + "="*70)
-    print("SPECLOGICNET DIAGNOSTICS")
-    print("="*70)
-    print("Checking for common issues that cause poor Hit@1 performance...")
-    
-    all_issues = []
-    all_recommendations = []
-    
-    # Run checks
-    all_issues.extend(check_data_quality(data_dir))
-    all_issues.extend(check_dataset_class(data_dir))
-    all_issues.extend(check_dataloader(data_dir, batch_size=64))
-    all_issues.extend(check_model(data_dir))
-    all_issues.extend(check_loss_function(data_dir))
-    
-    issues, recommendations = check_training_config(config_path)
-    all_issues.extend(issues)
-    all_recommendations.extend(recommendations)
-    
-    # Summary
-    print("\n" + "="*70)
-    print("DIAGNOSTIC SUMMARY")
-    print("="*70)
-    
-    if len(all_issues) == 0:
-        print("✅ No critical issues found!")
-        print("   Training should achieve Hit@1 > 70%")
-    else:
-        print(f"❌ Found {len(all_issues)} critical issues:")
-        for issue in all_issues:
-            print(f"   {issue}")
-    
-    if len(all_recommendations) > 0:
-        print(f"\n💡 {len(all_recommendations)} recommendations:")
-        for rec in all_recommendations:
-            print(f"   {rec}")
-    
-    print("\n" + "="*70)
-    
-    return len(all_issues) == 0
-
+    # 3. Run diagnostics
+    diagnostic = FeatureDiagnostic(dataset)
+    diagnostic.run_diagnostics(num_samples=500)
 
 if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Diagnose common issues")
-    parser.add_argument("--data-dir", default="data/horn")
-    parser.add_argument("--config", default=None)
-    args = parser.parse_args()
-    
-    success = run_diagnostics(args.data_dir, args.config)
-    
-    exit(0 if success else 1)
+    main()

@@ -1,56 +1,152 @@
 #!/bin/bash
 
-# Complete training pipeline for SpecLogicNet - FULLY FIXED
-# Usage: bash run.sh
+# ==============================================================================
+# SOTA Horn Clause GNN - Full Research Pipeline (v5 - Final Fix)
+#
+# This script is now robust to stale caches and k-dimension mismatches.
+#
+# 1. Clears the stale spectral cache to force regeneration.
+# 2. Disables 'adaptive-k' during preprocessing to ensure a consistent k=16.
+# 3. Passes '--k-dim 16' to train.py, which now forces the model AND
+#    the dataset loaders to use this exact k-value, overriding auto-detection.
+#
+# ==============================================================================
+source "/Users/amirmac/WorkSpace/Codes/LogNet/Phase-2.5.2/.venv2/bin/activate"
+
+# --- Configuration ---
+
+# Directories
+DATA_DIR="./generated_data"
+SPECTRAL_DIR="./spectral_cache"
+EXP_DIR="./experiment_results"
+VALIDATION_DIR="./validation_reports"
+SEMANTIC_FILE="./atom_embeddings.json"
+
+
+# Path to your virtual environment's Python
+VENV_PYTHON="/Users/amirmac/WorkSpace/Codes/LogNet/Phase-2.5.2/.venv2/bin/python"
+
+# Data Generation Config
+N_EASY=200
+N_MEDIUM=200
+N_HARD=400
+N_VERY_HARD=400
+
+# Spectral Preprocessing Config
+SPECTRAL_K=16 # This is the single source of truth for k
+NUM_WORKERS_SPECTRAL=$(($(nproc --all 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4) - 1))
+
+# Training Config
+EPOCHS=30
+BATCH_SIZE=16
+HIDDEN_DIM=128
+NUM_LAYERS=4
+LEARNING_RATE=0.0001
+VALUE_LOSS_WEIGHT=0.1
+TACTIC_LOSS_WEIGHT=0.2
+GRAD_ACCUM_STEPS=4
+# --- Script Logic ---
 
 set -e
-
-echo "================================"
-echo "SpecLogicNet Training Pipeline"
-echo "================================"
-
-# Configuration - OPTIMIZED
-DATA_DIR="data/horn"
-EXP_DIR="experiments/run_$(date +%Y%m%d_%H%M%S)"
-BATCH_SIZE=128          # Reduced for better gradients
-EPOCHS=30
-LR=1e-3                # Higher initial LR with scheduler
-HIDDEN_DIM=256         # Smaller model for dataset size
-NUM_LAYERS=4
-DROPOUT=0.3            # Increased dropout
-DEVICE="mps"
-
-# Step 1: Generate dataset
-echo ""
-echo "Step 1: Generating dataset..."
-python data_generator.py
-
-# Step 2: Train model
-echo ""
-echo "Step 2: Training model..."
-python train.py \
-  --data-dir $DATA_DIR \
-  --exp-dir $EXP_DIR \
-  --epochs $EPOCHS \
-  --batch-size $BATCH_SIZE \
-  --lr $LR \
-  --hidden-dim $HIDDEN_DIM \
-  --num-layers $NUM_LAYERS \
-  --dropout $DROPOUT \
-  --device $DEVICE \
-  --seed 42 \
-  --use-type-aware
+echo "🔥 Clearing Python cache (__pycache__)..."
+find . -type d -name "__pycache__" -exec rm -r {} +
+echo "✅ Python cache cleared."
 
 
-# Step 3: Results
-echo ""
-echo "================================"
-echo "Training complete!"
-echo "Results saved to: $EXP_DIR"
-echo "================================"
+echo "🚀 Starting Full SOTA Horn Clause GNN Pipeline..."
+echo "================================================="
+date
 
-if [ -f "$EXP_DIR/results.json" ]; then
-    echo ""
-    echo "Test Results:"
-    cat "$EXP_DIR/results.json" | python -m json.tool | grep -A 5 "test_metrics"
-fi
+# 0. Create Directories
+echo "📂 [Step 0/6] Creating directories..."
+mkdir -p "$DATA_DIR"
+mkdir -p "$SPECTRAL_DIR"
+mkdir -p "$EXP_DIR"
+mkdir -p "$VALIDATION_DIR"
+echo "✅ Directories created."
+echo "-------------------------------------------------"
+
+# 1. Data Generation
+echo "🧬 [Step 1/6] Generating dataset..."
+"$VENV_PYTHON" data_generator.py \
+    --output-dir "$DATA_DIR" \
+    --easy $N_EASY \
+    --medium $N_MEDIUM \
+    --hard $N_HARD \
+    --very-hard $N_VERY_HARD
+echo "✅ Dataset generated in $DATA_DIR."
+echo "-------------------------------------------------"
+
+# 2. Clear Stale Cache (NEW FIX)
+echo "🔥 [Step 2/6] Clearing stale spectral cache..."
+rm -rf "$SPECTRAL_DIR"
+mkdir -p "$SPECTRAL_DIR"
+echo "✅ Stale cache cleared. Ready for regeneration."
+echo "-------------------------------------------------"
+
+# echo "🧬 [Step 2.5/7] Preprocessing semantic features..."
+# "$VENV_PYTHON" preprocess_semantic.py \
+#     --data-dir "$DATA_DIR" \
+#     --output-file "$SEMANTIC_FILE"
+# echo "✅ Semantic embeddings saved to $SEMANTIC_FILE."
+# echo "-------------------------------------------------"
+
+
+# 3. Spectral Feature Preprocessing
+echo "📊 [Step 3/6] Preprocessing spectral features (parallelized)..."
+# This will now use the *correct* node count (len(nodes))
+# We REMOVE --adaptive-k to force a consistent k=16
+"$VENV_PYTHON" batch_process_spectral.py \
+    --data_dir "$DATA_DIR" \
+    --output_dir "$SPECTRAL_DIR" \
+    --k $SPECTRAL_K \
+    --num_workers $NUM_WORKERS_SPECTRAL \
+    --no-adaptive-k
+echo "✅ Spectral features regenerated in $SPECTRAL_DIR with k=$SPECTRAL_K."
+echo "-------------------------------------------------"
+
+# 4. Model Training
+echo "🧠 [Step 4/6] Starting model training..."
+echo "   - Model: TacticGuidedGNN (via get_model)"
+echo "   - Dataset: StepPredictionDataset"
+echo "   - Loss: ProofSearchRankingLoss (Fixed) + Value + Tactic"
+"$VENV_PYTHON" train.py \
+    --data-dir "$DATA_DIR" \
+    --spectral-dir "$SPECTRAL_DIR" \
+    --exp-dir "$EXP_DIR" \
+    --epochs $EPOCHS \
+    --batch-size $BATCH_SIZE \
+    --hidden-dim $HIDDEN_DIM \
+    --lr $LEARNING_RATE \
+    --k-dim $SPECTRAL_K \
+    --num-layers $NUM_LAYERS \
+    # --atom-embed-file $SEMANTIC_FILE # <-- ADD THIS LINE with your desired value
+    
+echo "✅ Training complete. Results in $EXP_DIR."
+echo "================================================="
+# 5. Post-Training Validation
+echo "🔬 [Step 5/6] Generating post-training validation reports..."
+"$VENV_PYTHON" validate_spectral.py \
+    --cache-dir "$SPECTRAL_DIR" \
+    --output-dir "$VALIDATION_DIR/spectral_report"
+"$VENV_PYTHON" validate_temporal.py \
+    --output-dir "$VALIDATION_DIR/temporal_report"
+echo "✅ Validation reports saved to $VALIDATION_DIR."
+echo "-------------------------------------------------"
+
+# 6. Inference (Placeholder)
+echo "🔍 [Step 6/6] Inference (Beam Search)..."
+echo "   - The next step is to use the trained model for proof search."
+# "$VENV_PYTHON" run_search.py \
+#     --model-path "$EXP_DIR/best.pt" \
+#     --data-dir "$DATA_DIR" \ 
+#     --output-file "$EXP_DIR/inference_results.json" \
+#     --beam-width 5
+echo "✅ Inference placeholder complete."
+echo "-------------------------------------------------"
+
+echo "🎉 Full Pipeline Finished Successfully!"
+date
+echo "================================================="
+
+exit 0
