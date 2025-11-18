@@ -167,7 +167,7 @@ def reorder_proof_steps(proof_steps, fact_map, initial_atoms, rules, rule_map):
             # --- THIS IS THE FIX ---
             # A step is executable if all its premises are known.
             # We DON'T care if the head is already known during re-ordering.
-            if body_atoms.issubset(known_atoms) and head_atom not in known_atoms:
+            if body_atoms.issubset(known_atoms):
                 # This step can be executed
                 ordered_steps.append(step)
                 known_atoms.add(head_atom) # Add its conclusion to known set
@@ -492,6 +492,7 @@ def generate_horn_instance_deterministic(
             "source": "backward_chaining_fixed"
         }
     }
+
 
 def validate_proof_execution_order(proof_steps, nodes, initial_atoms, rules):
     """

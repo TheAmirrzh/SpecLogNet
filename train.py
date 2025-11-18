@@ -17,6 +17,7 @@ Key improvements:
 - Expected +27% improvement in Hit@1
 """
 
+from torch.optim.lr_scheduler import OneCycleLR
 from curriculum import SetToSetCurriculumScheduler
 
 import torch
@@ -38,8 +39,8 @@ from typing import Dict, Tuple, Optional
 # Import fixed modules
 from dataset import ProofStepDataset, create_properly_split_dataloaders
 from metrics import ProofMetricsCompute
-from model import CriticallyFixedProofGNN
-from losses import ContrastiveRankingLoss, FocalApplicabilityLoss
+from model import CriticallyFixedProofGNN, SOTAFixedProofGNN
+from losses import ApplicabilityConstrainedLoss, ContrastiveRankingLoss, DecoupledApplicabilityRankingLoss, FocalApplicabilityLoss, HybridTripletListwiseValueLoss, InfoNCEListwiseLoss, TheoreticallySoundLoss, TripletLossWithHardMining
 from losses import FocusedRankingLoss
 from temporal_encoder import CausalProofTemporalEncoder
 
@@ -143,7 +144,7 @@ def train_epoch(model: nn.Module, train_loader: DataLoader,
         batch = batch.to(device)
         
         # Forward pass
-        scores, embeddings, value = model(batch)
+        scores, embeddings, value, recon_spectral = model(batch)
         
         # Get batch size (number of graphs)
         batch_size = batch.num_graphs if hasattr(batch, 'num_graphs') else 1
@@ -291,13 +292,15 @@ def evaluate(model, val_loader, criterion, device, split_name='val'):
     mrr_sum = 0.0
     ndcg_sum = 0.0
     app_acc_sum = 0.0
-    
+    total_target_prob = 0.0
+    total_rank_percentile = 0.0
+
     for batch in tqdm(val_loader, desc=f"Eval {split_name}"):
         if batch is None: continue
         batch = batch.to(device)
         
         # Forward pass
-        scores, embeddings, value = model(batch)
+        scores, embeddings, value, recon_spectral = model(batch)
         
         batch_size = batch.num_graphs if hasattr(batch, 'num_graphs') else 1
         
@@ -364,6 +367,12 @@ def evaluate(model, val_loader, criterion, device, split_name='val'):
                 rank_val = rank[0].item() + 1
                 ndcg_sum += 1.0 / np.log2(rank_val + 1)
             
+            target_prob, rank_pct = compute_ranking_quality(
+                graph_scores, target_idx_local, graph_applicable
+            )
+            total_target_prob += target_prob
+            total_rank_percentile += rank_pct
+
             num_samples += 1
         
     # Average metrics
@@ -378,11 +387,14 @@ def evaluate(model, val_loader, criterion, device, split_name='val'):
         f'{split_name}_mrr': mrr_sum / n,
         f'{split_name}_ndcg': ndcg_sum / n,
         f'{split_name}_applicable_acc': app_acc_sum / n,
+        f'{split_name}_target_prob': total_target_prob / n,
+        f'{split_name}_rank_percentile': total_rank_percentile / n,
         f'{split_name}_num_samples': num_samples
     }
 
 def train_epoch_with_curriculum(model, train_loader, optimizer, criterion,
-                                device, epoch, scheduler, # 'scheduler' is the curriculum
+                                device, epoch, scheduler,
+                                scheduler_onecycle, # 'scheduler' is the curriculum
                                 grad_accum_steps=4, value_loss_weight=0.1):
     """
     FIXED: Merges correct per-graph slicing with curriculum loss weighting.
@@ -410,7 +422,7 @@ def train_epoch_with_curriculum(model, train_loader, optimizer, criterion,
         batch = batch.to(device)
         
         # --- FORWARD PASS ---
-        scores, embeddings, value = model(batch)
+        scores, embeddings, value, recon_spectral = model(batch)
         
         # Get batch size (number of graphs)
         batch_size = batch.num_graphs if hasattr(batch, 'num_graphs') else 1
@@ -453,19 +465,17 @@ def train_epoch_with_curriculum(model, train_loader, optimizer, criterion,
             
             # --- START: Curriculum Integration ---
             # Get difficulty metadata for this sample
-            sample_difficulty_val = batch.difficulty[i].item()
-            if sample_difficulty_val < 0.3: sample_diff_str = 'easy'
-            elif sample_difficulty_val < 0.6: sample_diff_str = 'medium'
-            elif sample_difficulty_val < 0.8: sample_diff_str = 'hard'
-            else: sample_diff_str = 'very_hard'
+            meta = batch.meta_list[i]
+            sample_diff_str = meta['difficulty']    # This is already a string like 'easy'
+            step_idx = meta['step_idx']
+            proof_length = meta.get('proof_length', 10) # Use 10 as a safe default
 
             # Get loss weight from curriculum
-            # This requires 'proof_length' in batch.meta_list
             loss_weight = scheduler.get_loss_weight(
                 epoch=epoch,
                 sample_difficulty=sample_diff_str,
-                step_idx=batch.meta_list[i]['step_idx'],
-                proof_length=batch.meta_list[i].get('proof_length', 10) # Fails if not in meta
+                step_idx=step_idx,
+                proof_length=proof_length
             )
 
             if loss_weight == 0.0: # Skip samples not in this curriculum phase
@@ -539,6 +549,8 @@ def train_epoch_with_curriculum(model, train_loader, optimizer, criterion,
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             optimizer.zero_grad()
+            if scheduler_onecycle is not None:
+                scheduler_onecycle.step()
         # Update progress bar
         if num_samples > 0:
             progress_bar.set_postfix({
@@ -562,6 +574,30 @@ def train_epoch_with_curriculum(model, train_loader, optimizer, criterion,
         'num_samples': num_samples
     }
 
+
+def compute_ranking_quality(scores: torch.Tensor, target_idx: int,
+                            applicable_mask: torch.Tensor) -> Tuple[float, float]:
+    """Measure how well the model ranks the target among applicable rules"""
+    applicable_indices = applicable_mask.nonzero(as_tuple=True)[0]
+    
+    if applicable_indices.numel() == 0 or target_idx not in applicable_indices:
+        return 0.0, 1.0 # 0% prob, 100% (worst) rank percentile
+
+    applicable_scores = scores[applicable_indices]
+    
+    # Normalize scores to probabilities
+    probs = F.softmax(applicable_scores, dim=0)
+    
+    target_pos_mask = (applicable_indices == target_idx)
+    if not target_pos_mask.any():
+         return 0.0, 1.0
+         
+    target_pos = target_pos_mask.nonzero(as_tuple=True)[0].item()
+    
+    # Return: (1) probability mass on target, (2) ranking percentile
+    rank_percentile = target_pos / len(applicable_indices)
+    return probs[target_pos].item(), rank_percentile
+
 # ==============================================================================
 # MAIN TRAINING LOOP
 # ==============================================================================
@@ -570,9 +606,9 @@ def main():
         description="Train with Critical Fixes Applied"
     )
     
-    parser.add_argument('--data-dir', type=str, required=True,
+    parser.add_argument('--data-dir', type=str, default='generated_data',
                        help='Directory with generated proof data')
-    parser.add_argument('--spectral-dir', type=str, default=None,
+    parser.add_argument('--spectral-dir', type=str, default='spectral_cache',
                        help='Directory with precomputed spectral features')
     parser.add_argument('--exp-dir', type=str, default='experiments/critical_fixes',
                        help='Directory to save experiment results')
@@ -593,7 +629,7 @@ def main():
     # Loss hyperparameters
     parser.add_argument('--margin', type=float, default=2.0,
                        help='Margin for focal loss')
-    parser.add_argument('--gamma', type=float, default=2.0,
+    parser.add_argument('--gamma', type=float, default=1.5,
                        help='Focusing parameter for focal loss')
     parser.add_argument('--alpha', type=float, default=0.5,
                        help='Hard negative weight')
@@ -605,7 +641,7 @@ def main():
                        help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-4,
                        help='Learning rate')
-    parser.add_argument('--grad-accum-steps', type=int, default=2,
+    parser.add_argument('--grad-accum-steps', type=int, default=4,
                        help='Gradient accumulation steps')
     parser.add_argument('--value-loss-weight', type=float, default=0.1,
                        help='Weight for value prediction loss')
@@ -644,10 +680,10 @@ def main():
     logger.info("TRAINING WITH CRITICAL FIXES")
     logger.info("="*80)
     logger.info(f"Fixes Applied:")
-    logger.info(f"  ✅ Causal Temporal Masking (prevents future-step leakage)")
-    logger.info(f"  ✅ Proper Data Split (no instance leakage)")
-    logger.info(f"  ✅ Gated Pathway Fusion (prevents pathway collapse)")
-    logger.info(f"  ✅ Focal Applicability Loss (hard negative mining)")
+    logger.info(f"  âœ… Causal Temporal Masking (prevents future-step leakage)")
+    logger.info(f"  âœ… Proper Data Split (no instance leakage)")
+    logger.info(f"  âœ… Gated Pathway Fusion (prevents pathway collapse)")
+    logger.info(f"  âœ… Focal Applicability Loss (hard negative mining)")
     logger.info("="*80 + "\n")
     
     # logger.info(f"Loading atom embeddings from {args.atom_embed_file}...")
@@ -656,11 +692,11 @@ def main():
     #         atom_embeddings = json.load(f)
     #     # Get dimension from the first embedding
     #     atom_embed_dim = len(next(iter(atom_embeddings.values())))
-    #     logger.info(f"✅ Atom embedding dimension: {atom_embed_dim}")
+    #     logger.info(f"âœ… Atom embedding dimension: {atom_embed_dim}")
     # except Exception as e:
     #     logger.error(f"FATAL: Could not load atom embeddings. {e}")
     #     return
-    in_dim = 25
+    in_dim = 29
     logger.info(f"Calculated final model input dimension: {in_dim}")
     # Load data with proper split
     logger.info("Loading data with proper instance-level split...")
@@ -671,11 +707,11 @@ def main():
         val_ratio=0.15,
         batch_size=args.batch_size,
         seed=args.seed,
-        # atom_embedding_file=args.atom_embed_file, # <-- PASS IT
-        
+        num_workers=2,
+        pin_memory=True        
     )
     
-    logger.info(f"✅ Data loaded")
+    logger.info(f"âœ… Data loaded")
     logger.info(f"   Train batches: {len(train_loader)}")
     logger.info(f"   Val batches: {len(val_loader)}")
     logger.info(f"   Test batches: {len(test_loader)}\n")
@@ -687,10 +723,10 @@ def main():
     )
 
     
-    logger.info("✅ Curriculum scheduler initialized\n")
+    logger.info("âœ… Curriculum scheduler initialized\n")
     # Initialize model
     logger.info("Initializing CriticallyFixedProofGNN...")
-    model = CriticallyFixedProofGNN(
+    model = SOTAFixedProofGNN(
         in_dim=in_dim,
         hidden_dim=args.hidden_dim,
         num_layers=args.num_layers,
@@ -699,30 +735,27 @@ def main():
     ).to(device)
     
     num_params = sum(p.numel() for p in model.parameters())
-    logger.info(f"✅ Model initialized: {num_params:,} parameters\n")
+    logger.info(f"âœ… Model initialized: {num_params:,} parameters\n")
     
-    logger.info("Initializing FocalApplicabilityLoss...")
-    criterion = FocalApplicabilityLoss(
-        margin=args.margin,
-        alpha=args.alpha,
-        gamma=args.gamma
-    )
-    logger.info(f"✅ Loss initialized (margin={args.margin}, alpha={args.alpha}, gamma={args.gamma})\n")
+    logger.info("Initializing ApplicabilityConstrainedLoss...")
+    criterion = ApplicabilityConstrainedLoss()
+    logger.info(f"âœ… Loss initialized (margin={args.margin})\n")
+
+    optimizer = AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-4)
     
-    optimizer = AdamW(
-        model.parameters(),
-        lr=args.lr,
-        weight_decay=1e-3,
-        betas=(0.9, 0.98)
-    )
-    
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    # Calculate steps_per_epoch, ensuring it's at least 1
+    steps_per_epoch = max(len(train_loader), 1)
+
+    scheduler = OneCycleLR(
         optimizer,
-        mode='max',
-        factor=0.5,
-        patience=5,
-        min_lr=1e-6
+        max_lr=2e-4, # Use a higher max LR as recommended
+        epochs=args.epochs,
+        steps_per_epoch=steps_per_epoch,
+        pct_start=0.15,
+        div_factor=25.0,
+        final_div_factor=1000.0 
     )
+    logger.info("Using OneCycleLR scheduler with 10% warmup.")
     
     # Training loop
     best_val_hit1 = 0.0
@@ -734,14 +767,14 @@ def main():
     
     for epoch in range(1, args.epochs + 1):
         logger.info(f"\n{'='*80}")
-        logger.info(curriculum_scheduler.get_epoch_stats(epoch))  # ← ADD
+        logger.info(curriculum_scheduler.get_epoch_stats(epoch))  # â† ADD
 
         logger.info(f"{'='*80}")
         
         # Train
         train_metrics = train_epoch_with_curriculum(
             model, train_loader, optimizer, criterion, device, epoch, 
-            curriculum_scheduler, args.grad_accum_steps, 
+            curriculum_scheduler, scheduler, args.grad_accum_steps, 
             args.value_loss_weight
         )
         
@@ -778,20 +811,20 @@ def main():
                 'train_metrics': train_metrics
             }, exp_dir / 'best_model.pt')
             
-            logger.info(f"\n🎯 NEW BEST Hit@1: {best_val_hit1:.4f}")
+            logger.info(f"\nðŸŽ¯ NEW BEST Hit@1: {best_val_hit1:.4f}")
         else:
             patience_counter += 1
-            logger.info(f"\n⏳ Patience: {patience_counter}/{patience_limit}")
+            logger.info(f"\nâ³ Patience: {patience_counter}/{patience_limit}")
         
         # Early stopping
         if patience_counter >= patience_limit:
-            logger.info(f"\n🛑 Early stopping at epoch {epoch}")
+            logger.info(f"\nðŸ›‘ Early stopping at epoch {epoch}")
             break
         
         # LR scheduling
-        scheduler.step(val_metrics['val_hit@1'])
+        # scheduler.step(val_metrics['val_hit@1'])
 
-        train_dataset.report()
+        # train_dataset.report()
 
     
     # Load best model and test
@@ -826,7 +859,7 @@ def main():
     with open(exp_dir / 'results.json', 'w') as f:
         json.dump(results, f, indent=2)
     
-    logger.info(f"\n✅ Training complete!")
+    logger.info(f"\nâœ… Training complete!")
     logger.info(f"   Results saved to: {exp_dir / 'results.json'}")
     logger.info(f"   Model saved to: {exp_dir / 'best_model.pt'}")
     logger.info(f"   Config saved to: {exp_dir / 'config.json'}")

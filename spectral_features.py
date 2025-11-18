@@ -32,7 +32,7 @@ class SpectralFeatureExtractor:
     
     def __init__(
         self,
-        k: int = 16,
+        k: int = 32,
         normalization: str = 'symmetric',
         add_self_loops: bool = True,
         tolerance: float = 0.0,
@@ -72,7 +72,7 @@ class SpectralFeatureExtractor:
         if self.normalization == 'symmetric':
             d_inv_sqrt = sp.diags(1.0 / np.sqrt(degrees))
             laplacian = sp.eye(num_nodes) - d_inv_sqrt @ adj @ d_inv_sqrt
-        elif self.normalization == 'random_walk':
+        elif self.normalization == 'random_walk':  # Set as default for directed proofs
             d_inv = sp.diags(1.0 / degrees)
             laplacian = sp.eye(num_nodes) - d_inv @ adj
         else:  # unnormalized
@@ -81,37 +81,19 @@ class SpectralFeatureExtractor:
         
         return laplacian.tocsr()
     
-    def _eigenvalue_correction(self, eigvals: np.ndarray, epsilon: float = 1e-2) -> np.ndarray:
-        """
-        FIXED: Spread repeated eigenvalues while PRESERVING structural zeros.
-        
-        Key insight: Zero eigenvalues encode # of connected components.
-        This is a fundamental graph property that MUST NOT be modified.
-        
-        Args:
-            eigvals: Original eigenvalues
-            epsilon: Perturbation magnitude
-        
-        Returns:
-            Corrected eigenvalues with structural zeros preserved
-        """
-
-        # return corrected
-        corrected = eigvals.copy()
-        zero_mask = np.abs(eigvals) < 1e-5
-        
-        # Preserve structural zeros (connected components)
-        for i in range(1, len(eigvals)):
-            if zero_mask[i] or zero_mask[i-1]:
-                continue
+    def _eigenvalue_correction(self, eigvals):
+            corrected = eigvals.copy()
             
-            # ADAPTIVE spacing based on spectral gap
-            if abs(corrected[i] - corrected[i-1]) < epsilon:
-                # Use Chebyshev nodes spacing for better polynomial interpolation
-                spacing = epsilon * (1 + 0.5 * np.cos(np.pi * i / len(eigvals)))
-                corrected[i] = corrected[i-1] + spacing
-        
-        return corrected
+            # Find clusters of near-duplicate eigenvalues (excluding true zeros)
+            for i in range(1, len(eigvals)):
+                if eigvals[i] < 1e-10:  # True structural zero
+                    continue
+                
+                if np.abs(eigvals[i] - eigvals[i-1]) < 1e-8:  # Duplicate
+                    # Add tiny noise to break tie
+                    corrected[i] += 1e-9 * i
+            
+            return corrected
     
     def compute_spectral_decomposition(
         self,
@@ -125,7 +107,7 @@ class SpectralFeatureExtractor:
         """
         num_nodes = laplacian.shape[0]
         
-        k_to_compute = min(self.k, num_nodes - 1)
+        k_to_compute = min(32, num_nodes // 2)
         if self.adaptive_k:
             k_to_compute = min(max(self.k, num_nodes // 3), 32)
             k_to_compute = min(k_to_compute, num_nodes - 1)
@@ -219,7 +201,7 @@ class SpectralFeatureExtractor:
             logger.info("Spectral Properties Validation:")
             logger.info(f"  Sorted: {results['sorted']}")
             logger.info(f"  Zero eigenvalue: {results['zero_eigenvalue']} "
-                       f"(λ₀ = {eigenvalues[0]:.2e})")
+                       f"(Î»â‚€ = {eigenvalues[0]:.2e})")
             logger.info(f"  Non-negative: {results['non_negative']}")
             logger.info(f"  Orthogonal: {results['orthogonal']} "
                        f"(error = {ortho_error:.2e})")
