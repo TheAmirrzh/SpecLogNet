@@ -1,0 +1,232 @@
+INFO:__main__:Using device: cuda
+INFO:__main__:================================================================================
+INFO:__main__:TRAINING WITH CRITICAL FIXES
+INFO:__main__:================================================================================
+INFO:__main__:Fixes Applied:
+INFO:__main__:  Ã¢Å“â€¦ Causal Temporal Masking (prevents future-step leakage)
+INFO:__main__:  Ã¢Å“â€¦ Proper Data Split (no instance leakage)
+INFO:__main__:  Ã¢Å“â€¦ Gated Pathway Fusion (prevents pathway collapse)
+INFO:__main__:  Ã¢Å“â€¦ Focal Applicability Loss (hard negative mining)
+INFO:__main__:================================================================================
+
+INFO:__main__:Calculated final model input dimension: 32
+INFO:__main__:Loading data with proper instance-level split...
+INFO:dataset:Using self-contained fixed_collate_fn from dataset.py.
+Loading files: 100% 1050/1050 [00:00<00:00, 3492.43it/s]
+INFO:dataset:âœ… Loaded 2849 proof steps from 1050 instances
+Loading files: 100% 225/225 [00:00<00:00, 5552.56it/s]
+INFO:dataset:âœ… Loaded 565 proof steps from 225 instances
+Loading files: 100% 225/225 [00:00<00:00, 5172.36it/s]
+INFO:dataset:âœ… Loaded 565 proof steps from 225 instances
+INFO:dataset:
+âœ… DataLoaders created with fixed_collate_fn (using torch.utils.data.DataLoader).
+INFO:dataset:   Train batches: 45
+INFO:dataset:   Val batches: 9
+INFO:dataset:   Test batches: 9
+INFO:__main__:Ã¢Å“â€¦ Data loaded
+INFO:__main__:   Train batches: 45
+INFO:__main__:   Val batches: 9
+INFO:__main__:   Test batches: 9
+
+INFO:__main__:Initializing curriculum scheduler...
+INFO:__main__:Ã¢Å“â€¦ Curriculum scheduler initialized
+
+INFO:__main__:Initializing CriticallyFixedProofGNN...
+INFO:temporal_encoder:ProofFrontierAttention initialized: heads=4, window=5
+INFO:temporal_encoder:TemporalStateEncoder initialized: dim=256, heads=4, window=5
+INFO:model:Using constrained Chebyshev coefficients.
+INFO:model:Using context-aware Value Head.
+INFO:model:Initialized SOTAFixedProofGNN with Polynomial Filters and 3-Pool Value Head.
+INFO:__main__:Ã¢Å“â€¦ Model initialized: 4,203,142 parameters
+
+INFO:__main__:Initializing ApplicabilityConstrainedLoss...
+INFO:__main__:Ã¢Å“â€¦ Loss initialized (margin=2.0)
+
+INFO:__main__:Using OneCycleLR scheduler with 10% warmup.
+INFO:__main__:Starting training...
+
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 1: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 1 Training: 100% 45/45 [00:24<00:00,  1.80it/s, rank_loss=3.97, val_loss=1.27, hit@1=0.106, app_acc=0.421]
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 3.9738
+INFO:__main__:  Value Loss: 1.2725
+INFO:__main__:  Hit@1: 0.1062
+INFO:__main__:  Applicable Acc: 0.4212
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.4877
+INFO:__main__:  Hit@1: 0.1429
+INFO:__main__:  Hit@3: 0.5306
+INFO:__main__:  Hit@5: 0.8163
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.3958
+INFO:__main__:  Applicable Acc: 0.8163
+INFO:__main__:
+Ã°Å¸Å½Â¯ NEW BEST Hit@1: 0.1429
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 2: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 2 Training: 100% 45/45 [00:24<00:00,  1.85it/s, rank_loss=2.04, val_loss=1.08, hit@1=0.183, app_acc=0.63]
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 2.0432
+INFO:__main__:  Value Loss: 1.0811
+INFO:__main__:  Hit@1: 0.1832
+INFO:__main__:  Applicable Acc: 0.6300
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.1847
+INFO:__main__:  Hit@1: 0.4898
+INFO:__main__:  Hit@3: 0.9592
+INFO:__main__:  Hit@5: 1.0000
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.7279
+INFO:__main__:  Applicable Acc: 0.9796
+INFO:__main__:
+Ã°Å¸Å½Â¯ NEW BEST Hit@1: 0.4898
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 3: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 3 Training: 100% 45/45 [00:24<00:00,  1.84it/s, rank_loss=1.57, val_loss=0.849, hit@1=0.264, app_acc=0.747]
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 1.5730
+INFO:__main__:  Value Loss: 0.8494
+INFO:__main__:  Hit@1: 0.2637
+INFO:__main__:  Applicable Acc: 0.7473
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.1574
+INFO:__main__:  Hit@1: 0.8571
+INFO:__main__:  Hit@3: 0.9796
+INFO:__main__:  Hit@5: 1.0000
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.9201
+INFO:__main__:  Applicable Acc: 0.9796
+INFO:__main__:
+Ã°Å¸Å½Â¯ NEW BEST Hit@1: 0.8571
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 4: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 4 Training: 100% 45/45 [00:23<00:00,  1.89it/s, rank_loss=0.659, val_loss=0.569, hit@1=0.469, app_acc=0.879]
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 0.6585
+INFO:__main__:  Value Loss: 0.5690
+INFO:__main__:  Hit@1: 0.4689
+INFO:__main__:  Applicable Acc: 0.8791
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.1339
+INFO:__main__:  Hit@1: 0.8776
+INFO:__main__:  Hit@3: 0.9796
+INFO:__main__:  Hit@5: 1.0000
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.9337
+INFO:__main__:  Applicable Acc: 0.9796
+INFO:__main__:
+Ã°Å¸Å½Â¯ NEW BEST Hit@1: 0.8776
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 5: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 5 Training: 100% 45/45 [00:24<00:00,  1.86it/s, rank_loss=0.515, val_loss=0.287, hit@1=0.564, app_acc=0.923]
+INFO:__main__:Global Hit@1: 0.4354
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 0.5149
+INFO:__main__:  Value Loss: 0.2866
+INFO:__main__:  Hit@1: 0.5641
+INFO:__main__:  Applicable Acc: 0.9231
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.1093
+INFO:__main__:  Hit@1: 0.8980
+INFO:__main__:  Hit@3: 0.9796
+INFO:__main__:  Hit@5: 1.0000
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.9439
+INFO:__main__:  Applicable Acc: 1.0000
+INFO:__main__:
+Ã°Å¸Å½Â¯ NEW BEST Hit@1: 0.8980
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 6: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 6 Training: 100% 45/45 [00:24<00:00,  1.87it/s, rank_loss=0.377, val_loss=0.0977, hit@1=0.634, app_acc=0.945]
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 0.3774
+INFO:__main__:  Value Loss: 0.0977
+INFO:__main__:  Hit@1: 0.6337
+INFO:__main__:  Applicable Acc: 0.9451
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.0979
+INFO:__main__:  Hit@1: 0.8776
+INFO:__main__:  Hit@3: 0.9796
+INFO:__main__:  Hit@5: 1.0000
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.9337
+INFO:__main__:  Applicable Acc: 1.0000
+INFO:__main__:
+Ã¢ÂÂ³ Patience: 1/15
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 7: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 7 Training: 100% 45/45 [00:24<00:00,  1.86it/s, rank_loss=0.253, val_loss=0.0366, hit@1=0.766, app_acc=0.96]
+INFO:__main__:
+Training Metrics:
+INFO:__main__:  Rank Loss: 0.2527
+INFO:__main__:  Value Loss: 0.0366
+INFO:__main__:  Hit@1: 0.7656
+INFO:__main__:  Applicable Acc: 0.9597
+INFO:__main__:
+Validation Metrics:
+INFO:__main__:  Loss: 0.1077
+INFO:__main__:  Hit@1: 0.9388
+INFO:__main__:  Hit@3: 1.0000
+INFO:__main__:  Hit@5: 1.0000
+INFO:__main__:  Hit@10: 1.0000
+INFO:__main__:  MRR: 0.9694
+INFO:__main__:  Applicable Acc: 0.9796
+INFO:__main__:
+Ã°Å¸Å½Â¯ NEW BEST Hit@1: 0.9388
+INFO:__main__:
+================================================================================
+INFO:__main__:Epoch 8: Foundation - Learn on easy proofs (depth â‰¤ 3) (max_length=3, max_depth=3)
+INFO:__main__:================================================================================
+INFO:__main__:Curriculum: Learn on easy proofs (depth â‰¤ 3)
+Epoch 8 Training:   9% 4/45 [00:03<00:33,  1.22it/s, rank_loss=0.0869, val_loss=0.0194, hit@1=0.867, app_acc=1]
+Traceback (most recent call last):
+  File "/content/train.py", line 874, in <module>
+    main()
+  File "/content/train.py", line 766, in main
+    train_metrics = train_epoch_with_curriculum(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/train.py", line 537, in train_epoch_with_curriculum
+    normalized_loss.backward() 
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/_tensor.py", line 625, in backward
+    torch.autograd.backward(
+  File "/usr/local/lib/python3.12/dist-packages/torch/autograd/__init__.py", line 354, in backward
+    _engine_run_backward(
+  File "/usr/local/lib/python3.12/dist-packages/torch/autograd/graph.py", line 841, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
