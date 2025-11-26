@@ -890,7 +890,7 @@ class SpatialGNNFixed(nn.Module):
                 heads=4, 
                 concat=False, 
                 dropout=dropout,
-                edge_dim=8  # â† CRITICAL: Add this parameter
+                edge_dim=8  # â†  CRITICAL: Add this parameter
             )
             for _ in range(num_layers)
         ])

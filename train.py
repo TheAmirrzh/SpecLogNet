@@ -767,7 +767,7 @@ def main():
     
     for epoch in range(1, args.epochs + 1):
         logger.info(f"\n{'='*80}")
-        logger.info(curriculum_scheduler.get_epoch_stats(epoch))  # â† ADD
+        logger.info(curriculum_scheduler.get_epoch_stats(epoch))  # â†  ADD
 
         logger.info(f"{'='*80}")
         
@@ -814,7 +814,7 @@ def main():
             logger.info(f"\nðŸŽ¯ NEW BEST Hit@1: {best_val_hit1:.4f}")
         else:
             patience_counter += 1
-            logger.info(f"\nâ³ Patience: {patience_counter}/{patience_limit}")
+            logger.info(f"\nâ ³ Patience: {patience_counter}/{patience_limit}")
         
         # Early stopping
         if patience_counter >= patience_limit:
